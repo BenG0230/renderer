@@ -13,6 +13,7 @@ unsafe extern "system" fn vulkan_debug_callback(
 ) -> vk::Bool32 {
     let message = unsafe { CStr::from_ptr((*callback_data).p_message).to_string_lossy() };
 
+    // Log type based on message severity
     match severity {
         sev if sev.contains(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR) => {
             log::error!("[VULKAN: {:?}] {message}", typ)
@@ -39,6 +40,7 @@ pub struct DebugMessenger {
 
 impl DebugMessenger {
     pub fn new(entry: &Entry, instance: &Instance) -> Result<Self, Box<dyn Error>> {
+        // Basically just say "give me all the debug messages"
         let create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(
                 vk::DebugUtilsMessageSeverityFlagsEXT::ERROR

@@ -13,6 +13,7 @@ pub(crate) struct VulkanRenderer {
     _entry: Entry,
     instance: Instance,
 
+    device: Device,
     debug_messenger: Option<DebugMessenger>,
 }
 
@@ -33,6 +34,7 @@ impl VulkanRenderer {
         Ok(Self {
             _entry: entry,
             instance,
+            device,
             debug_messenger,
         })
     }
@@ -54,12 +56,11 @@ impl VulkanRenderer {
             extension_names.push(debug_utils::NAME.as_ptr());
         }
 
-        let layer_names = REQUIRED_VALIDATION_LAYERS
-            .iter()
-            .map(|n| CString::new(*n).expect("Failed to build CString from layer name"))
-            .collect::<Vec<_>>();
-        let layer_name_ptrs = layer_names.iter().map(|n| n.as_ptr()).collect::<Vec<_>>();
+        // Get names of wanted validation layers
+        // must be done out here to appease the lifetime gods
+        let (_layer_names, layer_name_ptrs) = Self::get_layer_names_and_pointers();
 
+        // Enable the required extensions in the instance
         let mut instance_create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
             .enabled_extension_names(&extension_names);
@@ -69,6 +70,15 @@ impl VulkanRenderer {
         }
 
         unsafe { Ok(entry.create_instance(&instance_create_info, None).unwrap()) }
+    }
+
+    pub(super) fn get_layer_names_and_pointers() -> (Vec<CString>, Vec<*const i8>) {
+        let layer_names = REQUIRED_VALIDATION_LAYERS
+            .iter()
+            .map(|n| CString::new(*n).expect("Failed to build CString from layer name"))
+            .collect::<Vec<_>>();
+        let layer_name_ptrs = layer_names.iter().map(|n| n.as_ptr()).collect::<Vec<_>>();
+        (layer_names, layer_name_ptrs)
     }
 
     fn check_validation_layer_support(entry: &Entry) -> Result<(), Box<dyn Error>> {
@@ -102,6 +112,9 @@ impl VulkanRenderer {
 impl Drop for VulkanRenderer {
     fn drop(&mut self) {
         unsafe {
+            // Must drop device and debug_messenger before the instance
+            log::debug!("Dropping device");
+            self.device.destroy();
             if let Some(debug_messenger) = &self.debug_messenger {
                 log::debug!("Dropping debug messenger");
                 debug_messenger.destroy();
