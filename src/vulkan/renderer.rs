@@ -6,7 +6,7 @@ use ash::{Entry, Instance, ext::debug_utils, khr, vk};
 use crate::vulkan::debug::DebugMessenger;
 use crate::vulkan::device::Device;
 
-const ENABLE_VALIDATION_LAYERS: bool = true;
+pub const ENABLE_VALIDATION_LAYERS: bool = true;
 const REQUIRED_VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 pub(crate) struct VulkanRenderer {

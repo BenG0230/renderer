@@ -72,10 +72,6 @@ impl Device {
         // Nothing fancy needed yet
         let device_features = vk::PhysicalDeviceFeatures::default();
 
-        // Let the device know about the validation layers
-        let (_layer_names, layer_name_ptrs) =
-            super::renderer::VulkanRenderer::get_layer_names_and_pointers();
-
         let device_create_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queue_create_info)
             .enabled_features(&device_features);
