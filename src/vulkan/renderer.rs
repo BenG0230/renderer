@@ -6,7 +6,7 @@ use ash::{Entry, Instance, ext::debug_utils, khr, vk};
 use crate::vulkan::debug::DebugMessenger;
 use crate::vulkan::device::Device;
 
-pub const ENABLE_VALIDATION_LAYERS: bool = true;
+const ENABLE_VALIDATION_LAYERS: bool = true;
 const REQUIRED_VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 pub(crate) struct VulkanRenderer {
@@ -58,6 +58,7 @@ impl VulkanRenderer {
 
         // Get names of wanted validation layers
         // must be done out here to appease the lifetime gods
+        // layer_names must not be discarded as well
         let (_layer_names, layer_name_ptrs) = Self::get_layer_names_and_pointers();
 
         // Enable the required extensions in the instance
@@ -72,7 +73,7 @@ impl VulkanRenderer {
         unsafe { Ok(entry.create_instance(&instance_create_info, None).unwrap()) }
     }
 
-    pub(super) fn get_layer_names_and_pointers() -> (Vec<CString>, Vec<*const i8>) {
+    pub fn get_layer_names_and_pointers() -> (Vec<CString>, Vec<*const i8>) {
         let layer_names = REQUIRED_VALIDATION_LAYERS
             .iter()
             .map(|n| CString::new(*n).expect("Failed to build CString from layer name"))
