@@ -5,6 +5,9 @@ use std::{
 
 use ash::{Entry, Instance, ext::debug_utils, vk};
 
+pub const ENABLE_VALIDATION_LAYERS: bool = true;
+pub const REQUIRED_VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
+
 unsafe extern "system" fn vulkan_debug_callback(
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
     typ: vk::DebugUtilsMessageTypeFlagsEXT,
@@ -68,4 +71,27 @@ impl DebugMessenger {
                 .destroy_debug_utils_messenger(self.messenger, None);
         }
     }
+}
+
+pub fn check_validation_layer_support(entry: &Entry) -> Result<(), Box<dyn Error>> {
+    // Check that the system supports all validation layers listed above [REQUIRED_VALIDATION_LAYERS]
+    for layer in REQUIRED_VALIDATION_LAYERS.iter() {
+        let found = unsafe {
+            entry
+                .enumerate_instance_layer_properties()
+                .unwrap()
+                .iter()
+                .any(|l| {
+                    let name = CStr::from_ptr(l.layer_name.as_ptr());
+                    let name = name.to_str().expect("Failed to get layer name");
+                    name == *layer
+                })
+        };
+
+        if !found {
+            return Err(format!("Validation layer not supported: {layer}").into());
+        }
+    }
+
+    Ok(())
 }

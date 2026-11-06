@@ -9,6 +9,7 @@ ash-window = "0.13.0"
 raw-window-handle = "0.6.2"
 log = "0.4.35"
 thiserror = "2.0.21"
+vma = "0.3.1"
 
 [dev-dependencies]
 env_logger = "0.11.11"

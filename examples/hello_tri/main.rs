@@ -10,11 +10,16 @@ use winit::{
 
 struct App {
     window: Option<Window>,
+
+    renderer: Option<Renderer>,
 }
 
 impl App {
     pub fn new() -> Self {
-        Self { window: None }
+        Self {
+            window: None,
+            renderer: None,
+        }
     }
 }
 
@@ -24,7 +29,13 @@ impl ApplicationHandler for App {
             .create_window(Window::default_attributes().with_title("Test"))
             .unwrap();
 
-        self.window = Some(window);
+        match Renderer::new(&window) {
+            Ok(renderer) => {
+                self.window = Some(window);
+                self.renderer = Some(renderer);
+            }
+            Err(e) => log::error!("Error making renderer:\n\t{}", e),
+        }
     }
 
     fn window_event(
@@ -40,7 +51,9 @@ impl ApplicationHandler for App {
             }
             WindowEvent::RedrawRequested => {
                 if let Some(_window) = &mut self.window {
-                    //Redraw am i right
+                    if let Some(renderer) = &self.renderer {
+                        renderer.run();
+                    }
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
@@ -56,16 +69,9 @@ impl ApplicationHandler for App {
 
 fn main() -> Result<()> {
     env_logger::init();
-    // let event_loop = EventLoop::new().unwrap();
-    // let mut app = App::new();
-    // event_loop.run_app(&mut app)?;
-
-    match Renderer::new() {
-        Ok(rend) => rend.run(),
-        Err(e) => {
-            log::error!("Failed to run application: {}", e)
-        }
-    }
+    let event_loop = EventLoop::new().unwrap();
+    let mut app = App::new();
+    event_loop.run_app(&mut app)?;
 
     Ok(())
 }

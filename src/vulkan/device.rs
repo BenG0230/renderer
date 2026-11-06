@@ -40,20 +40,30 @@ impl Device {
     }
 
     fn is_device_suitable(instance: &Instance, device: vk::PhysicalDevice) -> bool {
-        // Very simple suitability check (probably change this :P)
         Self::find_queue_families(instance, device).is_some()
     }
 
     fn find_queue_families(instance: &Instance, device: vk::PhysicalDevice) -> Option<u32> {
+        let mut graphics_index = None;
+
         // Find a queue that supports graphics
         let props = unsafe { instance.get_physical_device_queue_family_properties(device) };
-        props
-            .iter()
-            .enumerate()
-            .find(|(_, family)| {
-                family.queue_count > 0 && family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-            })
-            .map(|(index, _)| index as u32)
+
+        for (index, family) in props.iter().enumerate() {
+            if family.queue_count <= 0 {
+                continue;
+            }
+
+            if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) && graphics_index.is_none() {
+                graphics_index = Some(index as u32);
+            }
+
+            if graphics_index.is_some() {
+                break;
+            }
+        }
+
+        graphics_index
     }
 
     fn create_logical_device(
