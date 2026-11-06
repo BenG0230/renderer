@@ -1,12 +1,11 @@
-use std::error::Error;
-use std::ffi::{CStr, CString, c_char, c_void};
+use std::{error::Error, ffi::CString};
 
-use ash::{Entry, Instance, ext::debug_utils, khr, vk};
+use ash::{Entry, Instance, ext::debug_utils, vk};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle};
 
-use crate::vulkan::debug::DebugMessenger;
-use crate::vulkan::device::Device;
 use crate::vulkan::surface::Surface;
+use crate::vulkan::swapchain::Swapchain;
+use crate::vulkan::{debug::DebugMessenger, device::Device};
 
 pub(crate) struct VulkanRenderer {
     _entry: Entry,
@@ -18,7 +17,11 @@ pub(crate) struct VulkanRenderer {
 }
 
 impl VulkanRenderer {
-    pub fn new(window: &(impl HasDisplayHandle + HasWindowHandle)) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        window: &(impl HasDisplayHandle + HasWindowHandle),
+        width: u32,
+        height: u32,
+    ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating Vulkan Application!");
 
         let entry = unsafe { ash::Entry::load() }?;
@@ -30,7 +33,9 @@ impl VulkanRenderer {
         };
 
         let surface = Surface::new(&entry, &instance, window)?;
-        let device = Device::new(&instance)?;
+        let device = Device::new(&instance, &surface)?;
+
+        let swapchain = Swapchain::new(&instance, &device, &surface, width, height)?;
 
         Ok(Self {
             _entry: entry,
@@ -41,7 +46,7 @@ impl VulkanRenderer {
         })
     }
 
-    pub fn create_instance(
+    fn create_instance(
         entry: &Entry,
         display_handle: RawDisplayHandle,
     ) -> Result<Instance, Box<dyn Error>> {
@@ -51,9 +56,12 @@ impl VulkanRenderer {
             .application_name(app_name.as_c_str())
             .api_version(vk::API_VERSION_1_3);
 
+        // Generate required extentions based on window from window library
+        // Chooses the correct ones for the system
         let mut extension_names =
             ash_window::enumerate_required_extensions(display_handle)?.to_vec();
         if super::debug::ENABLE_VALIDATION_LAYERS {
+            // Enable debug extensions if used
             extension_names.push(debug_utils::NAME.as_ptr());
         }
 
@@ -71,10 +79,12 @@ impl VulkanRenderer {
             instance_create_info = instance_create_info.enabled_layer_names(&layer_name_ptrs);
         }
 
-        unsafe { Ok(entry.create_instance(&instance_create_info, None).unwrap()) }
+        unsafe { Ok(entry.create_instance(&instance_create_info, None)?) }
     }
 
-    pub fn get_layer_names_and_pointers() -> (Vec<CString>, Vec<*const i8>) {
+    fn get_layer_names_and_pointers() -> (Vec<CString>, Vec<*const i8>) {
+        // Collect debug layer names in use, returns both the string and the pointers
+        // to keep the pointers alive
         let layer_names = super::debug::REQUIRED_VALIDATION_LAYERS
             .iter()
             .map(|n| CString::new(*n).expect("Failed to build CString from layer name"))
@@ -91,13 +101,18 @@ impl VulkanRenderer {
 impl Drop for VulkanRenderer {
     fn drop(&mut self) {
         unsafe {
-            // Must drop device and debug_messenger before the instance
+            // Must drop everything else before the instance itself
             log::debug!("Dropping device");
             self.device.destroy();
+
+            log::debug!("Dropping surface");
+            self.surface.destroy();
+
             if let Some(debug_messenger) = &self.debug_messenger {
                 log::debug!("Dropping debug messenger");
                 debug_messenger.destroy();
             }
+
             log::debug!("Dropping vulkan application");
             self.instance.destroy_instance(None)
         };

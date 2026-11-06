@@ -1,4 +1,3 @@
-use anyhow::{Result, anyhow};
 use renderer::renderer::Renderer;
 use winit::{
     application::ApplicationHandler,
@@ -28,13 +27,17 @@ impl ApplicationHandler for App {
         let window = event_loop
             .create_window(Window::default_attributes().with_title("Test"))
             .unwrap();
+        let window_size = window.inner_size();
 
-        match Renderer::new(&window) {
+        match Renderer::new(&window, window_size.width, window_size.height) {
             Ok(renderer) => {
                 self.window = Some(window);
                 self.renderer = Some(renderer);
             }
-            Err(e) => log::error!("Error making renderer:\n\t{}", e),
+            Err(e) => {
+                eprintln!("Error making renderer:\n\t{}", e);
+                event_loop.exit();
+            }
         }
     }
 
@@ -55,6 +58,7 @@ impl ApplicationHandler for App {
                         renderer.run();
                     }
                 }
+                event_loop.exit();
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.logical_key == Key::Named(NamedKey::Escape) {
@@ -67,11 +71,12 @@ impl ApplicationHandler for App {
     }
 }
 
-fn main() -> Result<()> {
+fn main() {
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
     let mut app = App::new();
-    event_loop.run_app(&mut app)?;
-
-    Ok(())
+    match event_loop.run_app(&mut app) {
+        Err(e) => eprintln!("{}", e),
+        _ => {}
+    }
 }

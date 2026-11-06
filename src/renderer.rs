@@ -9,9 +9,13 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(window: &(impl HasDisplayHandle + HasWindowHandle)) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        window: &(impl HasDisplayHandle + HasWindowHandle),
+        width: u32,
+        height: u32,
+    ) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            vulkan: VulkanRenderer::new(window)?,
+            vulkan: VulkanRenderer::new(window, width, height)?,
         })
     }
 

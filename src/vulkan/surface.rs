@@ -4,8 +4,8 @@ use ash::{Entry, Instance, khr::surface, vk};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 pub struct Surface {
-    pub surface: ash::khr::surface::Instance,
-    pub surface_khr: vk::SurfaceKHR,
+    pub loader: surface::Instance,
+    pub surface: vk::SurfaceKHR,
 }
 
 impl Surface {
@@ -17,13 +17,16 @@ impl Surface {
         let window_handle = window.window_handle()?.as_raw();
         let display_handle = window.display_handle()?.as_raw();
 
-        let surface = ash::khr::surface::Instance::new(entry, instance);
+        let loader = surface::Instance::new(entry, instance);
+        let surface = unsafe {
+            ash_window::create_surface(entry, instance, display_handle, window_handle, None)?
+        };
+        log::info!("Surface created");
 
-        Ok(Self {
-            surface,
-            surface_khr: unsafe {
-                ash_window::create_surface(entry, instance, display_handle, window_handle, None)?
-            },
-        })
+        Ok(Self { loader, surface })
+    }
+
+    pub fn destroy(&self) {
+        unsafe { self.loader.destroy_surface(self.surface, None) };
     }
 }
