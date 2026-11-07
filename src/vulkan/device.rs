@@ -92,7 +92,7 @@ impl Device {
         Ok(true)
     }
 
-    fn find_queue_families(
+    pub fn find_queue_families(
         instance: &Instance,
         surface: &Surface,
         device: vk::PhysicalDevice,

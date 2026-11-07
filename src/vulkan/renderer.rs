@@ -12,6 +12,9 @@ pub(crate) struct VulkanRenderer {
     instance: Instance,
 
     device: Device,
+
+    swapchain: Swapchain,
+
     surface: Surface,
     debug_messenger: Option<DebugMessenger>,
 }
@@ -41,6 +44,7 @@ impl VulkanRenderer {
             _entry: entry,
             instance,
             device,
+            swapchain,
             surface,
             debug_messenger,
         })
@@ -101,7 +105,17 @@ impl VulkanRenderer {
 impl Drop for VulkanRenderer {
     fn drop(&mut self) {
         unsafe {
-            // Must drop everything else before the instance itself
+            // Wait for device to be idle before destroying everything
+            log::debug!("Waiting for device to be idle");
+            let result = self.device.device.device_wait_idle();
+            if let Err(err) = result {
+                log::error!("{:?}", err);
+            }
+
+            // Must drop in reverse order of creation
+            log::debug!("Dropping swapchain");
+            self.swapchain.destroy();
+
             log::debug!("Dropping device");
             self.device.destroy();
 

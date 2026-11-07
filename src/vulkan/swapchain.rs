@@ -1,10 +1,16 @@
 use std::{error::Error, thread::available_parallelism};
 
-use ash::{Instance, vk};
+use ash::{Instance, khr::swapchain, vk};
 
 use crate::vulkan::{device::Device, surface::Surface};
 
-pub struct Swapchain {}
+pub struct Swapchain {
+    loader: swapchain::Device,
+    swapchain: vk::SwapchainKHR,
+    _images: Vec<vk::Image>,
+    _image_format: vk::Format,
+    _extent: vk::Extent2D,
+}
 
 impl Swapchain {
     pub fn new(
@@ -18,8 +24,66 @@ impl Swapchain {
         let format = Self::choose_swapchain_surface_format(&support.formats);
         let present_mode = Self::choose_swapchain_present_mode(&support.present_modes);
         let extent = Self::choose_swapchain_extent(&support.capabilities, width, height);
+        let image_count = {
+            // Want min image count + 1 as sticking to the minimum results in the program sometimes
+            // waiting for the driver to finish
+            let mut image_count = support.capabilities.min_image_count + 1;
+            // Max image count of 0 means unlimited images available
+            if support.capabilities.max_image_count > 0
+                && support.capabilities.max_image_count < image_count
+            {
+                image_count = support.capabilities.max_image_count;
+            }
+            image_count
+        };
 
-        Ok(Self {})
+        log::debug!(
+            "Creating swapchain:\n\tFormat: {:?}\n\tColour space: {:?}\n\tPresent mode: {:?}\n\tExtent: {:?}\n\tImage count: {}",
+            format.format,
+            format.color_space,
+            present_mode,
+            extent,
+            image_count
+        );
+
+        let (graphics_index, present_index) =
+            super::device::Device::find_queue_families(instance, surface, device.physical_device)?;
+        let family_indices = [graphics_index.unwrap(), present_index.unwrap()];
+
+        let mut create_info = vk::SwapchainCreateInfoKHR::default()
+            .surface(surface.surface)
+            .min_image_count(image_count)
+            .image_format(format.format)
+            .image_color_space(format.color_space)
+            .image_extent(extent)
+            .image_array_layers(1)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT);
+
+        if graphics_index != present_index {
+            create_info = create_info
+                .image_sharing_mode(vk::SharingMode::CONCURRENT)
+                .queue_family_indices(&family_indices);
+        } else {
+            create_info = create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE);
+        }
+
+        create_info = create_info
+            .pre_transform(support.capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(present_mode)
+            .clipped(true);
+
+        let loader = swapchain::Device::new(instance, &device.device);
+        let swapchain = unsafe { loader.create_swapchain(&create_info, None)? };
+        let images = unsafe { loader.get_swapchain_images(swapchain)? };
+
+        Ok(Self {
+            loader,
+            swapchain,
+            _images: images,
+            _image_format: format.format,
+            _extent: extent,
+        })
     }
 
     fn choose_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
@@ -57,6 +121,7 @@ impl Swapchain {
         height: u32,
     ) -> vk::Extent2D {
         if capabilities.current_extent.width != u32::MAX {
+            // The extent can be set by us only if the current extent is u32 Max
             return capabilities.current_extent;
         }
 
@@ -70,6 +135,10 @@ impl Swapchain {
                 capabilities.max_image_extent.height,
             ),
         }
+    }
+
+    pub fn destroy(&self) {
+        unsafe { self.loader.destroy_swapchain(self.swapchain, None) };
     }
 }
 

@@ -8,16 +8,15 @@ use winit::{
 };
 
 struct App {
+    renderer: Option<Renderer>, // Comes first to destroy first on drop
     window: Option<Window>,
-
-    renderer: Option<Renderer>,
 }
 
 impl App {
     pub fn new() -> Self {
         Self {
-            window: None,
             renderer: None,
+            window: None,
         }
     }
 }
