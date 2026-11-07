@@ -5,11 +5,12 @@ use ash::{Instance, khr::swapchain, vk};
 use crate::vulkan::{device::Device, surface::Surface};
 
 pub struct Swapchain {
-    loader: swapchain::Device,
-    swapchain: vk::SwapchainKHR,
+    pub loader: swapchain::Device,
+    pub swapchain: vk::SwapchainKHR,
     _images: Vec<vk::Image>,
     _image_format: vk::Format,
     _extent: vk::Extent2D,
+    pub image_views: Vec<vk::ImageView>,
 }
 
 impl Swapchain {
@@ -77,12 +78,15 @@ impl Swapchain {
         let swapchain = unsafe { loader.create_swapchain(&create_info, None)? };
         let images = unsafe { loader.get_swapchain_images(swapchain)? };
 
+        let image_views = Self::create_image_views(device, &images, format.format)?;
+
         Ok(Self {
             loader,
             swapchain,
             _images: images,
             _image_format: format.format,
             _extent: extent,
+            image_views,
         })
     }
 
@@ -137,7 +141,45 @@ impl Swapchain {
         }
     }
 
-    pub fn destroy(&self) {
+    fn create_image_views(
+        device: &Device,
+        images: &[vk::Image],
+        image_format: vk::Format,
+    ) -> Result<Vec<vk::ImageView>, Box<dyn Error>> {
+        let mut image_views = Vec::new();
+        for image in images {
+            let create_info = vk::ImageViewCreateInfo::default()
+                .image(*image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(image_format)
+                .components(vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::IDENTITY,
+                    g: vk::ComponentSwizzle::IDENTITY,
+                    b: vk::ComponentSwizzle::IDENTITY,
+                    a: vk::ComponentSwizzle::IDENTITY,
+                })
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+
+            let image_view = unsafe { device.device.create_image_view(&create_info, None)? };
+            image_views.push(image_view);
+        }
+
+        Ok(image_views)
+    }
+
+    pub fn destroy(&self, device: &Device) {
+        log::debug!("Dropping swapchain image views");
+        for image_view in &self.image_views {
+            unsafe { device.device.destroy_image_view(*image_view, None) };
+        }
+
+        log::debug!("Dropping swapchain");
         unsafe { self.loader.destroy_swapchain(self.swapchain, None) };
     }
 }

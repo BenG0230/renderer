@@ -113,8 +113,7 @@ impl Drop for VulkanRenderer {
             }
 
             // Must drop in reverse order of creation
-            log::debug!("Dropping swapchain");
-            self.swapchain.destroy();
+            self.swapchain.destroy(&self.device);
 
             log::debug!("Dropping device");
             self.device.destroy();
