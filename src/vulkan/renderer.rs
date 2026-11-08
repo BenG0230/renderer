@@ -3,6 +3,7 @@ use std::{error::Error, ffi::CString};
 use ash::{Entry, Instance, ext::debug_utils, vk};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle};
 
+use crate::vulkan::commands::Command;
 use crate::vulkan::surface::Surface;
 use crate::vulkan::swapchain::Swapchain;
 use crate::vulkan::{debug::DebugMessenger, device::Device};
@@ -17,6 +18,7 @@ pub(crate) struct VulkanRenderer {
 
     surface: Surface,
     debug_messenger: Option<DebugMessenger>,
+    command: Command,
 }
 
 impl VulkanRenderer {
@@ -27,8 +29,13 @@ impl VulkanRenderer {
     ) -> Result<Self, Box<dyn Error>> {
         log::info!("Creating Vulkan Application!");
 
+        let display_handle = window.display_handle();
+        if let Err(e) = display_handle {
+            return Err(format!("Error getting window display handle: {}", e).into());
+        }
+
         let entry = unsafe { ash::Entry::load() }?;
-        let instance = Self::create_instance(&entry, window.display_handle()?.as_raw())?;
+        let instance = Self::create_instance(&entry, display_handle.unwrap().as_raw())?;
         let debug_messenger = if super::debug::ENABLE_VALIDATION_LAYERS {
             Some(DebugMessenger::new(&entry, &instance)?)
         } else {
@@ -40,6 +47,10 @@ impl VulkanRenderer {
 
         let swapchain = Swapchain::new(&instance, &device, &surface, width, height)?;
 
+        let command = Command::new(&device)?;
+        //TODO: Not hard code FFI
+        let buffers = command.allocate_buffer(&device, 2)?;
+
         Ok(Self {
             _entry: entry,
             instance,
@@ -47,6 +58,7 @@ impl VulkanRenderer {
             swapchain,
             surface,
             debug_messenger,
+            command,
         })
     }
 
@@ -113,6 +125,9 @@ impl Drop for VulkanRenderer {
             }
 
             // Must drop in reverse order of creation
+            log::debug!("Dropping command pool");
+            self.command.destroy(&self.device);
+
             self.swapchain.destroy(&self.device);
 
             log::debug!("Dropping device");

@@ -1,6 +1,9 @@
 use std::{error::Error, ffi::CStr};
 
-use ash::{Instance, vk};
+use ash::{
+    Instance,
+    vk::{self, PhysicalDeviceDynamicRenderingFeatures},
+};
 
 use crate::vulkan::{surface::Surface, swapchain::SwapchainSupport};
 
@@ -9,6 +12,8 @@ pub struct Device {
     pub device: ash::Device,
     _graphics_queue: vk::Queue,
     _present_queue: vk::Queue,
+    pub graphics_queue_index: u32,
+    pub present_queue_index: u32,
 }
 
 fn get_required_device_extentions() -> [&'static CStr; 1] {
@@ -21,11 +26,15 @@ impl Device {
         let (device, graphics_queue, present_queue) =
             Self::create_logical_device(instance, surface, physical_device)?;
 
+        let (graphics, present) = Self::find_queue_families(instance, surface, physical_device)?;
+
         Ok(Self {
             physical_device,
             device,
             _graphics_queue: graphics_queue,
             _present_queue: present_queue,
+            graphics_queue_index: graphics.unwrap(),
+            present_queue_index: present.unwrap(),
         })
     }
 
@@ -52,6 +61,19 @@ impl Device {
         Ok(device.unwrap())
     }
 
+    fn check_device_feature_support(instance: &Instance, device: vk::PhysicalDevice) -> bool {
+        let mut dynamic_feature = vk::PhysicalDeviceDynamicRenderingFeatures::default();
+        let mut sync_2_feature = vk::PhysicalDeviceSynchronization2Features::default();
+
+        let mut features = vk::PhysicalDeviceFeatures2::default()
+            .push_next(&mut dynamic_feature)
+            .push_next(&mut sync_2_feature);
+
+        unsafe { instance.get_physical_device_features2(device, &mut features) };
+
+        dynamic_feature.dynamic_rendering == vk::TRUE && sync_2_feature.synchronization2 == vk::TRUE
+    }
+
     fn is_device_suitable(
         instance: &Instance,
         surface: &Surface,
@@ -62,13 +84,18 @@ impl Device {
         // Must have adequate swapchain support
         let (graphics, present) = Self::find_queue_families(instance, surface, device)?;
         let extension_support = Self::check_device_extension_support(instance, device)?;
+        let feature_support = Self::check_device_feature_support(instance, device);
 
         let is_swapchain_adequate = {
             let details = SwapchainSupport::new(device, surface)?;
             !details.formats.is_empty() && !details.present_modes.is_empty()
         };
 
-        Ok(graphics.is_some() && present.is_some() && extension_support && is_swapchain_adequate)
+        Ok(graphics.is_some()
+            && present.is_some()
+            && extension_support
+            && is_swapchain_adequate
+            && feature_support)
     }
 
     fn check_device_extension_support(
@@ -92,7 +119,7 @@ impl Device {
         Ok(true)
     }
 
-    pub fn find_queue_families(
+    fn find_queue_families(
         instance: &Instance,
         surface: &Surface,
         device: vk::PhysicalDevice,
@@ -170,10 +197,17 @@ impl Device {
 
         let device_features = vk::PhysicalDeviceFeatures::default();
 
+        let mut dynamic_feature =
+            vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
+        let mut sync_2_feature =
+            vk::PhysicalDeviceSynchronization2Features::default().synchronization2(true);
+
         let device_create_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queue_create_info)
             .enabled_extension_names(&device_extensions_ptrs)
-            .enabled_features(&device_features);
+            .enabled_features(&device_features)
+            .push_next(&mut dynamic_feature)
+            .push_next(&mut sync_2_feature);
 
         let device = unsafe { instance.create_device(device, &device_create_info, None)? };
         let graphics_queue = unsafe { device.get_device_queue(graphics_family_index, 0) };

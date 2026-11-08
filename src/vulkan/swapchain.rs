@@ -1,4 +1,4 @@
-use std::{error::Error, thread::available_parallelism};
+use std::error::Error;
 
 use ash::{Instance, khr::swapchain, vk};
 
@@ -47,9 +47,7 @@ impl Swapchain {
             image_count
         );
 
-        let (graphics_index, present_index) =
-            super::device::Device::find_queue_families(instance, surface, device.physical_device)?;
-        let family_indices = [graphics_index.unwrap(), present_index.unwrap()];
+        let family_indices = [device.graphics_queue_index, device.present_queue_index];
 
         let mut create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface.surface)
@@ -60,7 +58,7 @@ impl Swapchain {
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT);
 
-        if graphics_index != present_index {
+        if device.graphics_queue_index != device.graphics_queue_index {
             create_info = create_info
                 .image_sharing_mode(vk::SharingMode::CONCURRENT)
                 .queue_family_indices(&family_indices);
