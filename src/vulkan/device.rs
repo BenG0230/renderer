@@ -2,7 +2,7 @@ use std::{error::Error, ffi::CStr};
 
 use ash::{
     Instance,
-    vk::{self, PhysicalDeviceDynamicRenderingFeatures},
+    vk::{self},
 };
 
 use crate::vulkan::{surface::Surface, swapchain::SwapchainSupport};

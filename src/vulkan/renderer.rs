@@ -4,9 +4,12 @@ use ash::{Entry, Instance, ext::debug_utils, vk};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle};
 
 use crate::vulkan::commands::Command;
+use crate::vulkan::frame::Frame;
 use crate::vulkan::surface::Surface;
 use crate::vulkan::swapchain::Swapchain;
 use crate::vulkan::{debug::DebugMessenger, device::Device};
+
+const FRAMES_IN_FLIGHT: u32 = 2;
 
 pub(crate) struct VulkanRenderer {
     _entry: Entry,
@@ -18,7 +21,12 @@ pub(crate) struct VulkanRenderer {
 
     surface: Surface,
     debug_messenger: Option<DebugMessenger>,
-    command: Command,
+
+    command_pool: Command,
+
+    frames: Vec<Frame>,
+    image_fences: Vec<vk::Fence>,
+    current_frame: usize,
 }
 
 impl VulkanRenderer {
@@ -47,9 +55,16 @@ impl VulkanRenderer {
 
         let swapchain = Swapchain::new(&instance, &device, &surface, width, height)?;
 
-        let command = Command::new(&device)?;
-        //TODO: Not hard code FFI
-        let buffers = command.allocate_buffer(&device, 2)?;
+        let command_pool = Command::new(&device)?;
+        let cmd_buffers = command_pool.allocate_buffer(&device, FRAMES_IN_FLIGHT)?;
+
+        let mut frames = Vec::new();
+        for i in 0..FRAMES_IN_FLIGHT {
+            log::debug!("Creating frame {i}");
+            frames.push(Frame::new(cmd_buffers[i as usize], &device)?);
+        }
+
+        let image_fences = vec![vk::Fence::null(); swapchain.images.len()];
 
         Ok(Self {
             _entry: entry,
@@ -58,7 +73,10 @@ impl VulkanRenderer {
             swapchain,
             surface,
             debug_messenger,
-            command,
+            command_pool,
+            frames,
+            image_fences,
+            current_frame: 0,
         })
     }
 
@@ -109,6 +127,8 @@ impl VulkanRenderer {
         (layer_names, layer_name_ptrs)
     }
 
+    pub fn render(&self) {}
+
     pub fn run(&self) {
         log::info!("Running Application!");
     }
@@ -125,8 +145,13 @@ impl Drop for VulkanRenderer {
             }
 
             // Must drop in reverse order of creation
+            log::debug!("Dropping frames");
+            for frame in &self.frames {
+                frame.destroy(&self.device);
+            }
+
             log::debug!("Dropping command pool");
-            self.command.destroy(&self.device);
+            self.command_pool.destroy(&self.device);
 
             self.swapchain.destroy(&self.device);
 

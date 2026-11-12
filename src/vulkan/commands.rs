@@ -14,6 +14,7 @@ impl Command {
         let create_info = vk::CommandPoolCreateInfo::default()
             .queue_family_index(device.graphics_queue_index)
             .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER);
+        // flag allows buffers to be reset instead of having to allocate each time
 
         let pool = unsafe { device.device.create_command_pool(&create_info, None)? };
 

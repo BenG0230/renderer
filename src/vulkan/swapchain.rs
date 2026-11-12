@@ -7,7 +7,7 @@ use crate::vulkan::{device::Device, surface::Surface};
 pub struct Swapchain {
     pub loader: swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
-    _images: Vec<vk::Image>,
+    pub images: Vec<vk::Image>,
     _image_format: vk::Format,
     _extent: vk::Extent2D,
     pub image_views: Vec<vk::ImageView>,
@@ -81,7 +81,7 @@ impl Swapchain {
         Ok(Self {
             loader,
             swapchain,
-            _images: images,
+            images,
             _image_format: format.format,
             _extent: extent,
             image_views,
