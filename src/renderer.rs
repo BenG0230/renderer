@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, time::Instant};
 
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
@@ -21,6 +21,7 @@ impl Renderer {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.vulkan.resize_requested = true;
+        self.vulkan.resize_request_time = Instant::now();
         self.vulkan.width = width;
         self.vulkan.height = height;
     }

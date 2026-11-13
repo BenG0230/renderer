@@ -30,7 +30,5 @@ float4 main(VSOutput input)
     float2 screenUV = pixelCoord / float2(800, 600);
 
     float3 col = float3(screenUV, 0.0);
-    col = pow(col, 2.2);
-
     return float4(col, 1.0);
 }

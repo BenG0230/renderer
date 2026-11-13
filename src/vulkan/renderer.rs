@@ -1,4 +1,5 @@
 use std::mem::ManuallyDrop;
+use std::time::{Duration, Instant};
 use std::{error::Error, ffi::CString};
 
 use ash::{Entry, Instance, ext::debug_utils, vk};
@@ -51,6 +52,7 @@ pub(crate) struct VulkanRenderer {
     vertex_buffer: Buffer,
 
     pub resize_requested: bool,
+    pub resize_request_time: Instant,
     pub width: u32,
     pub height: u32,
 }
@@ -120,6 +122,7 @@ impl VulkanRenderer {
             vertex_buffer,
 
             resize_requested: false,
+            resize_request_time: Instant::now(),
             width,
             height,
         })
@@ -176,7 +179,9 @@ impl VulkanRenderer {
             return Ok(());
         }
 
-        if self.resize_requested {
+        // 10ms debounce time
+        if self.resize_requested && self.resize_request_time.elapsed() > Duration::from_millis(150)
+        {
             // wait for device to be idle to create new swapchain and destroy old one
             unsafe { self.device.device.device_wait_idle() }?;
 
