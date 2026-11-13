@@ -8,9 +8,9 @@ use crate::vulkan::{
 };
 
 pub struct Frame {
-    command_buffer: vk::CommandBuffer,
-    image_available: vk::Semaphore,
-    in_flight_fence: vk::Fence,
+    pub command_buffer: vk::CommandBuffer,
+    pub image_available: vk::Semaphore,
+    pub in_flight_fence: vk::Fence,
 }
 
 impl Frame {

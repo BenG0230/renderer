@@ -10,8 +10,8 @@ use crate::vulkan::{surface::Surface, swapchain::SwapchainSupport};
 pub struct Device {
     pub physical_device: vk::PhysicalDevice,
     pub device: ash::Device,
-    _graphics_queue: vk::Queue,
-    _present_queue: vk::Queue,
+    pub graphics_queue: vk::Queue,
+    pub present_queue: vk::Queue,
     pub graphics_queue_index: u32,
     pub present_queue_index: u32,
 }
@@ -31,8 +31,8 @@ impl Device {
         Ok(Self {
             physical_device,
             device,
-            _graphics_queue: graphics_queue,
-            _present_queue: present_queue,
+            graphics_queue,
+            present_queue,
             graphics_queue_index: graphics.unwrap(),
             present_queue_index: present.unwrap(),
         })

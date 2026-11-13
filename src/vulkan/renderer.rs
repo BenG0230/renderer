@@ -2,14 +2,30 @@ use std::{error::Error, ffi::CString};
 
 use ash::{Entry, Instance, ext::debug_utils, vk};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle};
+use vk_mem::{Alloc, Allocation, Allocator, AllocatorCreateInfo};
 
 use crate::vulkan::commands::Command;
 use crate::vulkan::frame::Frame;
+use crate::vulkan::pipeline::Pipeline;
 use crate::vulkan::surface::Surface;
 use crate::vulkan::swapchain::Swapchain;
 use crate::vulkan::{debug::DebugMessenger, device::Device};
 
 const FRAMES_IN_FLIGHT: u32 = 2;
+const VERTICES: [Vertex; 3] = [
+    Vertex {
+        pos: [-1.0, -1.0],
+        color: [1.0, 0.0, 0.0],
+    },
+    Vertex {
+        pos: [1.0, -1.0],
+        color: [0.0, 1.0, 0.0],
+    },
+    Vertex {
+        pos: [0.0, 1.0],
+        color: [0.0, 0.0, 1.0],
+    },
+];
 
 pub(crate) struct VulkanRenderer {
     _entry: Entry,
@@ -27,6 +43,12 @@ pub(crate) struct VulkanRenderer {
     frames: Vec<Frame>,
     image_fences: Vec<vk::Fence>,
     current_frame: usize,
+
+    pipeline: Pipeline,
+
+    allocator: Allocator,
+    buffer: vk::Buffer,
+    allocation: Allocation,
 }
 
 impl VulkanRenderer {
@@ -66,6 +88,13 @@ impl VulkanRenderer {
 
         let image_fences = vec![vk::Fence::null(); swapchain.images.len()];
 
+        let pipeline = Pipeline::new(&swapchain, &device)?;
+
+        let allocator_create_info =
+            AllocatorCreateInfo::new(&instance, &device.device, device.physical_device);
+        let allocator = unsafe { Allocator::new(allocator_create_info) }?;
+        let (buffer, allocation) = Self::create_vertex_buffer(&allocator)?;
+
         Ok(Self {
             _entry: entry,
             instance,
@@ -77,6 +106,10 @@ impl VulkanRenderer {
             frames,
             image_fences,
             current_frame: 0,
+            pipeline,
+            allocator,
+            buffer,
+            allocation,
         })
     }
 
@@ -127,7 +160,236 @@ impl VulkanRenderer {
         (layer_names, layer_name_ptrs)
     }
 
-    pub fn render(&self) {}
+    fn create_vertex_buffer(
+        allocator: &Allocator,
+    ) -> Result<(vk::Buffer, Allocation), Box<dyn Error>> {
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size((size_of::<Vertex>() * VERTICES.len()) as u64)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::Auto,
+            flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
+                | vk_mem::AllocationCreateFlags::MAPPED,
+            ..Default::default()
+        };
+
+        let (buffer, allocation) = unsafe { allocator.create_buffer(&buffer_info, &alloc_info)? };
+
+        let info = allocator.get_allocation_info(&allocation);
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                VERTICES.as_ptr() as *const u8,
+                info.mapped_data as *mut u8,
+                size_of::<Vertex>() * VERTICES.len(),
+            );
+        }
+
+        Ok((buffer, allocation))
+    }
+
+    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
+        let frame = &self.frames[self.current_frame];
+        unsafe {
+            self.device.device.wait_for_fences(
+                std::slice::from_ref(&frame.in_flight_fence),
+                true,
+                u64::MAX,
+            )?
+        };
+
+        let (image_index, _) = unsafe {
+            self.swapchain.loader.acquire_next_image(
+                self.swapchain.swapchain,
+                u64::MAX,
+                frame.image_available,
+                vk::Fence::null(),
+            )?
+        };
+        let image_fence = self.image_fences[image_index as usize];
+        if image_fence != vk::Fence::null() {
+            unsafe {
+                self.device.device.wait_for_fences(
+                    std::slice::from_ref(&image_fence),
+                    true,
+                    u64::MAX,
+                )?
+            };
+        }
+        self.image_fences[image_index as usize] = frame.in_flight_fence;
+
+        let command_buffer = frame.command_buffer;
+        unsafe {
+            self.device
+                .device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?
+        };
+
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe {
+            self.device
+                .device
+                .begin_command_buffer(command_buffer, &begin_info)?
+        };
+
+        let image_barrier = vk::ImageMemoryBarrier2::default()
+            .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags2::NONE)
+            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(
+                vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+            )
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .image(self.swapchain.images[image_index as usize])
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .level_count(1)
+                    .layer_count(1),
+            );
+
+        let dependency_info = vk::DependencyInfo::default()
+            .image_memory_barriers(std::slice::from_ref(&image_barrier));
+
+        unsafe {
+            self.device
+                .device
+                .cmd_pipeline_barrier2(command_buffer, &dependency_info)
+        };
+
+        let colour_attachment_info = vk::RenderingAttachmentInfo::default()
+            .image_view(self.swapchain.image_views[image_index as usize])
+            .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .clear_value(vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 1.0],
+                },
+            });
+
+        let rendering_info = vk::RenderingInfo::default()
+            .render_area(self.swapchain.extent.into())
+            .layer_count(1)
+            .color_attachments(std::slice::from_ref(&colour_attachment_info));
+
+        unsafe {
+            self.device
+                .device
+                .cmd_begin_rendering(command_buffer, &rendering_info)
+        };
+
+        let vp = vk::Viewport::default()
+            .width(self.swapchain.extent.width as f32)
+            .height(self.swapchain.extent.height as f32)
+            .min_depth(0.0)
+            .max_depth(1.0);
+        let scissor: vk::Rect2D = self.swapchain.extent.into();
+        unsafe {
+            self.device
+                .device
+                .cmd_set_viewport(command_buffer, 0, std::slice::from_ref(&vp));
+            self.device
+                .device
+                .cmd_set_scissor(command_buffer, 0, std::slice::from_ref(&scissor));
+        }
+
+        unsafe {
+            self.device.device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.pipeline,
+            );
+            self.device.device.cmd_bind_vertex_buffers(
+                command_buffer,
+                0,
+                std::slice::from_ref(&self.buffer),
+                &[0],
+            );
+
+            self.device.device.cmd_draw(command_buffer, 3, 1, 0, 0);
+        }
+
+        unsafe {
+            self.device.device.cmd_end_rendering(command_buffer);
+        }
+
+        let image_barrier = vk::ImageMemoryBarrier2::default()
+            .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .src_access_mask(vk::AccessFlags2::NONE)
+            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+            .dst_access_mask(
+                vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+            )
+            .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
+            .image(self.swapchain.images[image_index as usize])
+            .subresource_range(
+                vk::ImageSubresourceRange::default()
+                    .aspect_mask(vk::ImageAspectFlags::COLOR)
+                    .level_count(1)
+                    .layer_count(1),
+            );
+
+        let dependency_info = vk::DependencyInfo::default()
+            .image_memory_barriers(std::slice::from_ref(&image_barrier));
+
+        unsafe {
+            self.device
+                .device
+                .cmd_pipeline_barrier2(command_buffer, &dependency_info);
+        };
+
+        unsafe { self.device.device.end_command_buffer(command_buffer)? }
+
+        let wait_semaphore_info = vk::SemaphoreSubmitInfo::default()
+            .semaphore(frame.image_available)
+            .stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT);
+
+        let command_buffer_submit_info =
+            vk::CommandBufferSubmitInfo::default().command_buffer(command_buffer);
+
+        let signal_semaphore_info = vk::SemaphoreSubmitInfo::default()
+            .semaphore(self.swapchain.render_finished[image_index as usize])
+            .stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT);
+
+        let submit_info = vk::SubmitInfo2::default()
+            .wait_semaphore_infos(std::slice::from_ref(&wait_semaphore_info))
+            .command_buffer_infos(std::slice::from_ref(&command_buffer_submit_info))
+            .signal_semaphore_infos(std::slice::from_ref(&signal_semaphore_info));
+
+        unsafe {
+            self.device
+                .device
+                .reset_fences(std::slice::from_ref(&frame.in_flight_fence))?;
+
+            self.device.device.queue_submit2(
+                self.device.graphics_queue,
+                std::slice::from_ref(&submit_info),
+                frame.in_flight_fence,
+            )?
+        };
+
+        self.current_frame = (self.current_frame + 1) % self.frames.len();
+
+        let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(std::slice::from_ref(
+                &self.swapchain.render_finished[image_index as usize],
+            ))
+            .swapchains(std::slice::from_ref(&self.swapchain.swapchain))
+            .image_indices(std::slice::from_ref(&image_index));
+
+        unsafe {
+            self.swapchain
+                .loader
+                .queue_present(self.device.present_queue, &present_info)?
+        };
+
+        Ok(())
+    }
 
     pub fn run(&self) {
         log::info!("Running Application!");
@@ -144,7 +406,13 @@ impl Drop for VulkanRenderer {
                 log::error!("{:?}", err);
             }
 
+            self.allocator
+                .destroy_buffer(self.buffer, &mut self.allocation);
+
             // Must drop in reverse order of creation
+            log::debug!("Dropping pipeline");
+            self.pipeline.destroy(&self.device);
+
             log::debug!("Dropping frames");
             for frame in &self.frames {
                 frame.destroy(&self.device);
@@ -170,4 +438,10 @@ impl Drop for VulkanRenderer {
             self.instance.destroy_instance(None)
         };
     }
+}
+
+#[repr(C)]
+pub struct Vertex {
+    pos: [f32; 2],
+    color: [f32; 3],
 }

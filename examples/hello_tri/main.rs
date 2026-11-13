@@ -52,12 +52,12 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                if let Some(_window) = &mut self.window {
-                    if let Some(renderer) = &self.renderer {
-                        renderer.run();
+                if let Some(renderer) = &mut self.renderer {
+                    if let Err(e) = renderer.render() {
+                        eprintln!("{e}");
+                        event_loop.exit();
                     }
                 }
-                event_loop.exit();
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.logical_key == Key::Named(NamedKey::Escape) {
@@ -66,6 +66,12 @@ impl ApplicationHandler for App {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        if let Some(window) = &mut self.window {
+            window.request_redraw();
         }
     }
 }

@@ -2,15 +2,17 @@ use std::error::Error;
 
 use ash::{Instance, khr::swapchain, vk};
 
-use crate::vulkan::{device::Device, surface::Surface};
+use crate::vulkan::{device::Device, surface::Surface, sync::create_semaphore};
 
 pub struct Swapchain {
     pub loader: swapchain::Device,
     pub swapchain: vk::SwapchainKHR,
     pub images: Vec<vk::Image>,
-    _image_format: vk::Format,
-    _extent: vk::Extent2D,
+    pub image_format: vk::Format,
+    pub extent: vk::Extent2D,
     pub image_views: Vec<vk::ImageView>,
+
+    pub render_finished: Vec<vk::Semaphore>,
 }
 
 impl Swapchain {
@@ -78,13 +80,19 @@ impl Swapchain {
 
         let image_views = Self::create_image_views(device, &images, format.format)?;
 
+        let mut render_finished = Vec::new();
+        for _ in 0..images.len() {
+            render_finished.push(create_semaphore(device)?);
+        }
+
         Ok(Self {
             loader,
             swapchain,
             images,
-            _image_format: format.format,
-            _extent: extent,
+            image_format: format.format,
+            extent,
             image_views,
+            render_finished,
         })
     }
 
@@ -110,7 +118,7 @@ impl Swapchain {
 
         if present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
             // Seems like the one everyone is using so 🤷‍♂️
-            vk::PresentModeKHR::MAILBOX
+            vk::PresentModeKHR::FIFO
         } else {
             // Guaranteed to be available, so best fallback
             vk::PresentModeKHR::FIFO

@@ -23,6 +23,10 @@ impl Renderer {
         log::error!("Lick!");
     }
 
+    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
+        self.vulkan.render()
+    }
+
     pub fn run(&self) {
         self.vulkan.run();
     }
