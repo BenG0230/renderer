@@ -549,6 +549,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.34.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "627003914c6057c9c8f0832ee4f870b5a4f599d0cfa83f4072675114860cd0ff"
+
+[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1250,9 +1256,11 @@ dependencies = [
  "ash",
  "ash-window",
  "env_logger",
+ "glam",
  "log",
  "raw-window-handle",
  "thiserror 2.0.21",
+ "tobj",
  "vk-mem",
  "winit",
 ]
@@ -1520,6 +1528,15 @@ dependencies = [
  "arrayref",
  "bytemuck",
  "strict-num",
+]
+
+[[package]]
+name = "tobj"
+version = "4.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6eb8e04167c1c0c76b5de63226fd733485ad63ef71e40de31e16272f47b099e2"
+dependencies = [
+ "ahash",
 ]
 
 [[package]]

@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    ffi::{CStr, CString},
-    io::Cursor,
-};
+use std::{error::Error, ffi::CString, mem::offset_of};
 
 use ash::vk;
 
@@ -10,7 +6,7 @@ use crate::vulkan::{device::Device, renderer::Vertex, swapchain::Swapchain};
 
 pub struct Pipeline {
     pub pipeline: vk::Pipeline,
-    layout: vk::PipelineLayout,
+    pub layout: vk::PipelineLayout,
     shader_module: vk::ShaderModule,
 }
 
@@ -28,7 +24,13 @@ impl Pipeline {
                 .create_shader_module(&shader_create_info, None)
         }?;
 
-        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default();
+        let push_constant_range = vk::PushConstantRange::default()
+            .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
+            .offset(0)
+            .size(size_of::<f32>() as u32 * 2);
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+            .push_constant_ranges(std::slice::from_ref(&push_constant_range));
 
         let layout = unsafe {
             device
@@ -45,13 +47,13 @@ impl Pipeline {
             vk::VertexInputAttributeDescription::default()
                 .location(0)
                 .binding(0)
-                .format(vk::Format::R32G32_SFLOAT)
+                .format(vk::Format::R32G32B32_SFLOAT)
                 .offset(0),
             vk::VertexInputAttributeDescription::default()
                 .location(1)
                 .binding(0)
                 .format(vk::Format::R32G32B32_SFLOAT)
-                .offset(8),
+                .offset(offset_of!(Vertex, normal) as u32),
         ];
 
         let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default()

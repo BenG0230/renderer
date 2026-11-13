@@ -14,20 +14,20 @@ use crate::vulkan::swapchain::Swapchain;
 use crate::vulkan::{debug::DebugMessenger, device::Device};
 
 const FRAMES_IN_FLIGHT: u32 = 2;
-const VERTICES: [Vertex; 3] = [
-    Vertex {
-        pos: [-1.0, -1.0],
-        color: [1.0, 0.0, 0.0],
-    },
-    Vertex {
-        pos: [1.0, -1.0],
-        color: [0.0, 1.0, 0.0],
-    },
-    Vertex {
-        pos: [0.0, 1.0],
-        color: [0.0, 0.0, 1.0],
-    },
-];
+// const VERTICES: [Vertex; 3] = [
+//     Vertex {
+//         pos: [-1.0, -1.0],
+//         color: [1.0, 0.0, 0.0],
+//     },
+//     Vertex {
+//         pos: [1.0, -1.0],
+//         color: [0.0, 1.0, 0.0],
+//     },
+//     Vertex {
+//         pos: [0.0, 1.0],
+//         color: [0.0, 0.0, 1.0],
+//     },
+// ];
 
 pub(crate) struct VulkanRenderer {
     _entry: Entry,
@@ -50,7 +50,8 @@ pub(crate) struct VulkanRenderer {
 
     allocator: ManuallyDrop<VulkanAllocator>,
     vertex_buffer: Buffer,
-
+    index_buffer: Buffer,
+    index_count: usize,
     pub resize_requested: bool,
     pub resize_request_time: Instant,
     pub width: u32,
@@ -104,7 +105,11 @@ impl VulkanRenderer {
         let pipeline = Pipeline::new(&swapchain, &device)?;
 
         let allocator = ManuallyDrop::new(VulkanAllocator::new(&instance, &device)?);
-        let vertex_buffer = Buffer::vertex_buffer(&allocator, &VERTICES)?;
+
+        let (vertices, indices) = Self::load_model();
+
+        let vertex_buffer = Buffer::vertex_buffer(&allocator, &vertices)?;
+        let index_buffer = Buffer::index_buffer(&allocator, &indices)?;
 
         Ok(Self {
             _entry: entry,
@@ -120,12 +125,67 @@ impl VulkanRenderer {
             pipeline,
             allocator,
             vertex_buffer,
-
+            index_buffer,
+            index_count: indices.len(),
             resize_requested: false,
             resize_request_time: Instant::now(),
             width,
             height,
         })
+    }
+    fn load_model() -> (Vec<Vertex>, Vec<u32>) {
+        let (models, materials) = tobj::load_obj(
+            "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.obj",
+            &tobj::GPU_LOAD_OPTIONS,
+        )
+        .unwrap();
+
+        let mut vertices: Vec<Vertex> = Vec::new();
+        let mut indices: Vec<u32> = Vec::new();
+
+        let mut model_index_start = 0;
+
+        for (i, m) in models.iter().enumerate() {
+            let mesh = &m.mesh;
+            if mesh.positions.len() != mesh.normals.len() {
+                log::error!(
+                    "Error reading mesh '{}', Positions and normals have different lengths",
+                    m.name
+                );
+                continue;
+            }
+
+            if mesh.positions.len() % 3 != 0 {
+                log::error!(
+                    "Error reading mesh '{}', Positions is not divisible by 3",
+                    m.name
+                );
+                continue;
+            }
+
+            for vi in 0..mesh.positions.len() / 3 {
+                vertices.push(Vertex {
+                    pos: glam::Vec3::new(
+                        mesh.positions[vi * 3],
+                        mesh.positions[vi * 3 + 1],
+                        mesh.positions[vi * 3 + 2],
+                    ),
+                    normal: glam::Vec3::new(
+                        mesh.normals[vi * 3],
+                        mesh.normals[vi * 3 + 1],
+                        mesh.normals[vi * 3 + 2],
+                    ),
+                });
+            }
+
+            for index in &mesh.indices {
+                indices.push(*index + model_index_start);
+            }
+
+            model_index_start = vertices.len() as u32;
+        }
+
+        (vertices, indices)
     }
 
     fn create_instance(
@@ -292,8 +352,10 @@ impl VulkanRenderer {
         };
 
         let vp = vk::Viewport::default()
+            .x(0.0)
+            .y(self.swapchain.extent.height as f32)
             .width(self.swapchain.extent.width as f32)
-            .height(self.swapchain.extent.height as f32)
+            .height(-(self.swapchain.extent.height as f32))
             .min_depth(0.0)
             .max_depth(1.0);
         let scissor: vk::Rect2D = self.swapchain.extent.into();
@@ -318,8 +380,38 @@ impl VulkanRenderer {
                 std::slice::from_ref(&self.vertex_buffer.buffer),
                 &[0],
             );
+            self.device.device.cmd_bind_index_buffer(
+                command_buffer,
+                self.index_buffer.buffer,
+                0,
+                vk::IndexType::UINT32,
+            );
 
-            self.device.device.cmd_draw(command_buffer, 3, 1, 0, 0);
+            let constants = PushConstants {
+                resolution: glam::Vec2::new(self.width as f32, self.height as f32),
+            };
+
+            let test = std::slice::from_raw_parts(
+                &constants as *const PushConstants as *const u8,
+                size_of::<PushConstants>(),
+            );
+
+            self.device.device.cmd_push_constants(
+                command_buffer,
+                self.pipeline.layout,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                0,
+                &*test,
+            );
+
+            self.device.device.cmd_draw_indexed(
+                command_buffer,
+                self.index_count as u32,
+                1,
+                0,
+                0,
+                0,
+            );
         }
 
         unsafe {
@@ -328,11 +420,9 @@ impl VulkanRenderer {
 
         let image_barrier = vk::ImageMemoryBarrier2::default()
             .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .src_access_mask(vk::AccessFlags2::NONE)
-            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .dst_access_mask(
-                vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-            )
+            .src_access_mask(vk::AccessFlags2::COLOR_ATTACHMENT_WRITE)
+            .dst_stage_mask(vk::PipelineStageFlags2::NONE)
+            .dst_access_mask(vk::AccessFlags2::NONE)
             .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
             .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
             .image(self.swapchain.images[image_index as usize])
@@ -418,6 +508,7 @@ impl Drop for VulkanRenderer {
             // Must drop in reverse order of creation
 
             self.vertex_buffer.destroy(&self.allocator);
+            self.index_buffer.destroy(&self.allocator);
             ManuallyDrop::drop(&mut self.allocator);
 
             log::debug!("Dropping pipeline");
@@ -452,6 +543,11 @@ impl Drop for VulkanRenderer {
 
 #[repr(C)]
 pub struct Vertex {
-    pos: [f32; 2],
-    color: [f32; 3],
+    pub pos: glam::Vec3,
+    pub normal: glam::Vec3,
+}
+
+#[repr(C)]
+pub struct PushConstants {
+    pub resolution: glam::Vec2,
 }
