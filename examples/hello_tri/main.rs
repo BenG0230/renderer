@@ -51,6 +51,11 @@ impl ApplicationHandler for App {
                 log::info!("Window closing");
                 event_loop.exit();
             }
+            WindowEvent::Resized(new_size) => {
+                if let Some(renderer) = &mut self.renderer {
+                    renderer.resize(new_size.width, new_size.height);
+                }
+            }
             WindowEvent::RedrawRequested => {
                 if let Some(renderer) = &mut self.renderer {
                     if let Err(e) = renderer.render() {

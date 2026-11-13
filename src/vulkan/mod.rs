@@ -1,5 +1,6 @@
 pub(crate) mod renderer;
 
+pub(self) mod allocation;
 pub(self) mod commands;
 pub(self) mod debug;
 pub(self) mod device;

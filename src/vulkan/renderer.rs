@@ -1,9 +1,10 @@
+use std::mem::ManuallyDrop;
 use std::{error::Error, ffi::CString};
 
 use ash::{Entry, Instance, ext::debug_utils, vk};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle};
-use vk_mem::{Alloc, Allocation, Allocator, AllocatorCreateInfo};
 
+use crate::vulkan::allocation::{Buffer, VulkanAllocator};
 use crate::vulkan::commands::Command;
 use crate::vulkan::frame::Frame;
 use crate::vulkan::pipeline::Pipeline;
@@ -46,9 +47,12 @@ pub(crate) struct VulkanRenderer {
 
     pipeline: Pipeline,
 
-    allocator: Allocator,
-    buffer: vk::Buffer,
-    allocation: Allocation,
+    allocator: ManuallyDrop<VulkanAllocator>,
+    vertex_buffer: Buffer,
+
+    pub resize_requested: bool,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl VulkanRenderer {
@@ -75,7 +79,14 @@ impl VulkanRenderer {
         let surface = Surface::new(&entry, &instance, window)?;
         let device = Device::new(&instance, &surface)?;
 
-        let swapchain = Swapchain::new(&instance, &device, &surface, width, height)?;
+        let swapchain = Swapchain::new(
+            &instance,
+            &device,
+            &surface,
+            width,
+            height,
+            vk::SwapchainKHR::null(),
+        )?;
 
         let command_pool = Command::new(&device)?;
         let cmd_buffers = command_pool.allocate_buffer(&device, FRAMES_IN_FLIGHT)?;
@@ -90,10 +101,8 @@ impl VulkanRenderer {
 
         let pipeline = Pipeline::new(&swapchain, &device)?;
 
-        let allocator_create_info =
-            AllocatorCreateInfo::new(&instance, &device.device, device.physical_device);
-        let allocator = unsafe { Allocator::new(allocator_create_info) }?;
-        let (buffer, allocation) = Self::create_vertex_buffer(&allocator)?;
+        let allocator = ManuallyDrop::new(VulkanAllocator::new(&instance, &device)?);
+        let vertex_buffer = Buffer::vertex_buffer(&allocator, &VERTICES)?;
 
         Ok(Self {
             _entry: entry,
@@ -108,8 +117,11 @@ impl VulkanRenderer {
             current_frame: 0,
             pipeline,
             allocator,
-            buffer,
-            allocation,
+            vertex_buffer,
+
+            resize_requested: false,
+            width,
+            height,
         })
     }
 
@@ -145,7 +157,6 @@ impl VulkanRenderer {
             super::debug::check_validation_layer_support(entry)?;
             instance_create_info = instance_create_info.enabled_layer_names(&layer_name_ptrs);
         }
-
         unsafe { Ok(entry.create_instance(&instance_create_info, None)?) }
     }
 
@@ -160,37 +171,30 @@ impl VulkanRenderer {
         (layer_names, layer_name_ptrs)
     }
 
-    fn create_vertex_buffer(
-        allocator: &Allocator,
-    ) -> Result<(vk::Buffer, Allocation), Box<dyn Error>> {
-        let buffer_info = vk::BufferCreateInfo::default()
-            .size((size_of::<Vertex>() * VERTICES.len()) as u64)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
-            .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-        let alloc_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::Auto,
-            flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
-                | vk_mem::AllocationCreateFlags::MAPPED,
-            ..Default::default()
-        };
-
-        let (buffer, allocation) = unsafe { allocator.create_buffer(&buffer_info, &alloc_info)? };
-
-        let info = allocator.get_allocation_info(&allocation);
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                VERTICES.as_ptr() as *const u8,
-                info.mapped_data as *mut u8,
-                size_of::<Vertex>() * VERTICES.len(),
-            );
+    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.width == 0 || self.height == 0 {
+            return Ok(());
         }
 
-        Ok((buffer, allocation))
-    }
+        if self.resize_requested {
+            // wait for device to be idle to create new swapchain and destroy old one
+            unsafe { self.device.device.device_wait_idle() }?;
 
-    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
+            let new_swapchain = Swapchain::new(
+                &self.instance,
+                &self.device,
+                &self.surface,
+                self.width,
+                self.height,
+                self.swapchain.swapchain,
+            )?;
+
+            let old_swapchain = std::mem::replace(&mut self.swapchain, new_swapchain);
+            old_swapchain.destroy(&self.device);
+
+            self.resize_requested = false;
+        }
+
         let frame = &self.frames[self.current_frame];
         unsafe {
             self.device.device.wait_for_fences(
@@ -306,7 +310,7 @@ impl VulkanRenderer {
             self.device.device.cmd_bind_vertex_buffers(
                 command_buffer,
                 0,
-                std::slice::from_ref(&self.buffer),
+                std::slice::from_ref(&self.vertex_buffer.buffer),
                 &[0],
             );
 
@@ -406,10 +410,11 @@ impl Drop for VulkanRenderer {
                 log::error!("{:?}", err);
             }
 
-            self.allocator
-                .destroy_buffer(self.buffer, &mut self.allocation);
-
             // Must drop in reverse order of creation
+
+            self.vertex_buffer.destroy(&self.allocator);
+            ManuallyDrop::drop(&mut self.allocator);
+
             log::debug!("Dropping pipeline");
             self.pipeline.destroy(&self.device);
 

@@ -22,6 +22,7 @@ impl Swapchain {
         surface: &Surface,
         width: u32,
         height: u32,
+        old_swapchain: vk::SwapchainKHR,
     ) -> Result<Self, Box<dyn Error>> {
         let support = SwapchainSupport::new(device.physical_device, surface)?;
         let format = Self::choose_swapchain_surface_format(&support.formats);
@@ -58,7 +59,8 @@ impl Swapchain {
             .image_color_space(format.color_space)
             .image_extent(extent)
             .image_array_layers(1)
-            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT);
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .old_swapchain(old_swapchain);
 
         if device.graphics_queue_index != device.graphics_queue_index {
             create_info = create_info
@@ -180,6 +182,11 @@ impl Swapchain {
     }
 
     pub fn destroy(&self, device: &Device) {
+        log::debug!("Dropping image semaphores");
+        for semaphore in &self.render_finished {
+            unsafe { device.device.destroy_semaphore(*semaphore, None) };
+        }
+
         log::debug!("Dropping swapchain image views");
         for image_view in &self.image_views {
             unsafe { device.device.destroy_image_view(*image_view, None) };

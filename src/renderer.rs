@@ -19,8 +19,10 @@ impl Renderer {
         })
     }
 
-    pub fn lick() {
-        log::error!("Lick!");
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.vulkan.resize_requested = true;
+        self.vulkan.width = width;
+        self.vulkan.height = height;
     }
 
     pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
