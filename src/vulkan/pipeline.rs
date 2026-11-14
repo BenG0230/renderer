@@ -103,7 +103,7 @@ impl Pipeline {
         let rasterisation_state = vk::PipelineRasterizationStateCreateInfo::default()
             .line_width(1.0)
             .front_face(vk::FrontFace::CLOCKWISE)
-            .cull_mode(vk::CullModeFlags::FRONT_AND_BACK);
+            .cull_mode(vk::CullModeFlags::BACK);
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::default()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
