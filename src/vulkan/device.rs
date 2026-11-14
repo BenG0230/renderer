@@ -16,8 +16,17 @@ pub struct Device {
     pub present_queue_index: u32,
 }
 
+#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 fn get_required_device_extentions() -> [&'static CStr; 1] {
     [ash::khr::swapchain::NAME]
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn get_required_device_extentions() -> [&'static CStr; 2] {
+    [
+        ash::khr::swapchain::NAME,
+        ash::khr::portability_subset::NAME,
+    ]
 }
 
 impl Device {

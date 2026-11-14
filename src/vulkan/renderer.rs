@@ -207,6 +207,13 @@ impl VulkanRenderer {
             extension_names.push(debug_utils::NAME.as_ptr());
         }
 
+        let create_flags = if cfg!(any(target_os = "macos", target_os = "ios")) {
+            extension_names.push(ash::khr::portability_enumeration::NAME.as_ptr());
+            vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
+        } else {
+            vk::InstanceCreateFlags::default()
+        };
+
         // Get names of wanted validation layers
         // must be done out here to appease the lifetime gods
         // layer_names must not be discarded as well
@@ -215,7 +222,9 @@ impl VulkanRenderer {
         // Enable the required extensions in the instance
         let mut instance_create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
-            .enabled_extension_names(&extension_names);
+            .enabled_extension_names(&extension_names)
+            .flags(create_flags);
+
         if super::debug::ENABLE_VALIDATION_LAYERS {
             super::debug::check_validation_layer_support(entry)?;
             instance_create_info = instance_create_info.enabled_layer_names(&layer_name_ptrs);
