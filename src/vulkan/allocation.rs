@@ -30,6 +30,7 @@ impl Buffer {
         allocator: &VulkanAllocator,
         data: &[super::renderer::Vertex],
     ) -> Result<Self, Box<dyn Error>> {
+        log::debug!("Allocating vertex buffer");
         let buffer_info = vk::BufferCreateInfo::default()
             .size((size_of::<super::renderer::Vertex>() * data.len()) as u64)
             .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
@@ -62,6 +63,7 @@ impl Buffer {
     }
 
     pub fn index_buffer(allocator: &VulkanAllocator, data: &[u32]) -> Result<Self, Box<dyn Error>> {
+        log::debug!("Allocating index buffer");
         let buffer_info = vk::BufferCreateInfo::default()
             .size((size_of::<u32>() * data.len()) as u64)
             .usage(vk::BufferUsageFlags::INDEX_BUFFER)
@@ -88,7 +90,6 @@ impl Buffer {
                 size_of::<u32>() * data.len(),
             );
         }
-        log::debug!("Loading data:3");
         Ok(Self { buffer, allocation })
     }
 
@@ -98,5 +99,37 @@ impl Buffer {
                 .allocator
                 .destroy_buffer(self.buffer, &mut self.allocation)
         };
+    }
+}
+
+pub struct Image {
+    pub image: vk::Image,
+    allocation: vk_mem::Allocation,
+}
+
+impl Image {
+    pub fn create_image(
+        allocator: &VulkanAllocator,
+        image_info: &vk::ImageCreateInfo,
+    ) -> Result<Self, Box<dyn Error>> {
+        log::debug!("allocating image");
+        let alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::Auto,
+            flags: vk_mem::AllocationCreateFlags::DEDICATED_MEMORY,
+            ..Default::default()
+        };
+
+        let (image, allocation) =
+            unsafe { allocator.allocator.create_image(image_info, &alloc_info)? };
+
+        Ok(Self { image, allocation })
+    }
+
+    pub fn destroy(&mut self, allocator: &VulkanAllocator) {
+        unsafe {
+            allocator
+                .allocator
+                .destroy_image(self.image, &mut self.allocation);
+        }
     }
 }

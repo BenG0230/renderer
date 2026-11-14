@@ -2,7 +2,11 @@ use std::{error::Error, ffi::CString, mem::offset_of};
 
 use ash::vk;
 
-use crate::vulkan::{device::Device, renderer::Vertex, swapchain::Swapchain};
+use crate::vulkan::{
+    device::Device,
+    renderer::{PushConstants, Vertex},
+    swapchain::Swapchain,
+};
 
 pub struct Pipeline {
     pub pipeline: vk::Pipeline,
@@ -27,7 +31,7 @@ impl Pipeline {
         let push_constant_range = vk::PushConstantRange::default()
             .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
             .offset(0)
-            .size(size_of::<f32>() as u32 * 2);
+            .size(size_of::<PushConstants>() as u32);
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
             .push_constant_ranges(std::slice::from_ref(&push_constant_range));
@@ -84,16 +88,22 @@ impl Pipeline {
             vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
         let mut rendering_create_info = vk::PipelineRenderingCreateInfo::default()
-            .color_attachment_formats(std::slice::from_ref(&swapchain.image_format));
+            .color_attachment_formats(std::slice::from_ref(&swapchain.image_format))
+            .depth_attachment_format(swapchain.depth_format);
+
+        let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::default()
+            .depth_test_enable(true)
+            .depth_write_enable(true)
+            .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL);
 
         let blend_attachment = vk::PipelineColorBlendAttachmentState::default()
             .color_write_mask(vk::ColorComponentFlags::RGBA);
         let color_blend_state = vk::PipelineColorBlendStateCreateInfo::default()
             .attachments(std::slice::from_ref(&blend_attachment));
-
-        let rasterisation_state =
-            vk::PipelineRasterizationStateCreateInfo::default().line_width(1.0);
-
+        let rasterisation_state = vk::PipelineRasterizationStateCreateInfo::default()
+            .line_width(1.0)
+            .front_face(vk::FrontFace::CLOCKWISE)
+            .cull_mode(vk::CullModeFlags::FRONT_AND_BACK);
         let multisample_state = vk::PipelineMultisampleStateCreateInfo::default()
             .rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
@@ -104,6 +114,7 @@ impl Pipeline {
             .viewport_state(&viewport_info)
             .rasterization_state(&rasterisation_state)
             .multisample_state(&multisample_state)
+            .depth_stencil_state(&depth_stencil_state)
             .color_blend_state(&color_blend_state)
             .dynamic_state(&dynamic_state)
             .layout(layout)
@@ -117,8 +128,8 @@ impl Pipeline {
                     std::slice::from_ref(&create_info),
                     None,
                 )
-                .unwrap()[0]
-        };
+                .map_err(|(_, error)| error)?
+        }[0];
 
         Ok(Self {
             pipeline,

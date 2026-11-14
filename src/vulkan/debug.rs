@@ -5,7 +5,11 @@ use std::{
 
 use ash::{Entry, Instance, ext::debug_utils, vk};
 
-pub const ENABLE_VALIDATION_LAYERS: bool = true;
+// #[cfg(debug_assertions)]
+// pub const ENABLE_VALIDATION_LAYERS: bool = true;
+// #[cfg(not(debug_assertions))]
+// pub const ENABLE_VALIDATION_LAYERS: bool = false;
+pub const ENABLE_VALIDATION_LAYERS: bool = cfg!(debug_assertions);
 pub const REQUIRED_VALIDATION_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 
 unsafe extern "system" fn vulkan_debug_callback(

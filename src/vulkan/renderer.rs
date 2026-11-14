@@ -56,6 +56,8 @@ pub(crate) struct VulkanRenderer {
     pub resize_request_time: Instant,
     pub width: u32,
     pub height: u32,
+
+    time: Instant,
 }
 
 impl VulkanRenderer {
@@ -82,10 +84,13 @@ impl VulkanRenderer {
         let surface = Surface::new(&entry, &instance, window)?;
         let device = Device::new(&instance, &surface)?;
 
+        let allocator = ManuallyDrop::new(VulkanAllocator::new(&instance, &device)?);
+
         let swapchain = Swapchain::new(
             &instance,
             &device,
             &surface,
+            &allocator,
             width,
             height,
             vk::SwapchainKHR::null(),
@@ -103,8 +108,6 @@ impl VulkanRenderer {
         let image_fences = vec![vk::Fence::null(); swapchain.images.len()];
 
         let pipeline = Pipeline::new(&swapchain, &device)?;
-
-        let allocator = ManuallyDrop::new(VulkanAllocator::new(&instance, &device)?);
 
         let (vertices, indices) = Self::load_model();
 
@@ -131,6 +134,7 @@ impl VulkanRenderer {
             resize_request_time: Instant::now(),
             width,
             height,
+            time: Instant::now(),
         })
     }
     fn load_model() -> (Vec<Vertex>, Vec<u32>) {
@@ -155,15 +159,8 @@ impl VulkanRenderer {
                 continue;
             }
 
-            if mesh.positions.len() % 3 != 0 {
-                log::error!(
-                    "Error reading mesh '{}', Positions is not divisible by 3",
-                    m.name
-                );
-                continue;
-            }
-
             for vi in 0..mesh.positions.len() / 3 {
+                log::info!("{:#?}", mesh.positions[vi * 3 + 2] + 1.0);
                 vertices.push(Vertex {
                     pos: glam::Vec3::new(
                         mesh.positions[vi * 3],
@@ -258,13 +255,14 @@ impl VulkanRenderer {
                 &self.instance,
                 &self.device,
                 &self.surface,
+                &self.allocator,
                 self.width,
                 self.height,
                 self.swapchain.swapchain,
             )?;
 
-            let old_swapchain = std::mem::replace(&mut self.swapchain, new_swapchain);
-            old_swapchain.destroy(&self.device);
+            let mut old_swapchain = std::mem::replace(&mut self.swapchain, new_swapchain);
+            old_swapchain.destroy(&self.allocator, &self.device);
 
             self.resize_requested = false;
         }
@@ -312,25 +310,41 @@ impl VulkanRenderer {
                 .begin_command_buffer(command_buffer, &begin_info)?
         };
 
-        let image_barrier = vk::ImageMemoryBarrier2::default()
-            .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .src_access_mask(vk::AccessFlags2::NONE)
-            .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
-            .dst_access_mask(
-                vk::AccessFlags2::COLOR_ATTACHMENT_READ | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
-            )
-            .old_layout(vk::ImageLayout::UNDEFINED)
-            .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
-            .image(self.swapchain.images[image_index as usize])
-            .subresource_range(
-                vk::ImageSubresourceRange::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .level_count(1)
-                    .layer_count(1),
-            );
+        let image_barriers = [
+            vk::ImageMemoryBarrier2::default()
+                .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+                .src_access_mask(vk::AccessFlags2::NONE)
+                .dst_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
+                .dst_access_mask(
+                    vk::AccessFlags2::COLOR_ATTACHMENT_READ
+                        | vk::AccessFlags2::COLOR_ATTACHMENT_WRITE,
+                )
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+                .image(self.swapchain.images[image_index as usize])
+                .subresource_range(
+                    vk::ImageSubresourceRange::default()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .level_count(1)
+                        .layer_count(1),
+                ),
+            vk::ImageMemoryBarrier2::default()
+                .src_stage_mask(vk::PipelineStageFlags2::LATE_FRAGMENT_TESTS)
+                .src_access_mask(vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .dst_stage_mask(vk::PipelineStageFlags2::EARLY_FRAGMENT_TESTS)
+                .dst_access_mask(vk::AccessFlags2::DEPTH_STENCIL_ATTACHMENT_WRITE)
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                .new_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+                .image(self.swapchain.depth_images[image_index as usize].image)
+                .subresource_range(
+                    vk::ImageSubresourceRange::default()
+                        .aspect_mask(vk::ImageAspectFlags::DEPTH | vk::ImageAspectFlags::STENCIL)
+                        .level_count(1)
+                        .layer_count(1),
+                ),
+        ];
 
-        let dependency_info = vk::DependencyInfo::default()
-            .image_memory_barriers(std::slice::from_ref(&image_barrier));
+        let dependency_info = vk::DependencyInfo::default().image_memory_barriers(&image_barriers);
 
         unsafe {
             self.device
@@ -348,11 +362,23 @@ impl VulkanRenderer {
                     float32: [0.0, 0.0, 0.0, 1.0],
                 },
             });
+        let depth_attachment_info = vk::RenderingAttachmentInfo::default()
+            .image_view(self.swapchain.depth_image_views[image_index as usize])
+            .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .clear_value(vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            });
 
         let rendering_info = vk::RenderingInfo::default()
             .render_area(self.swapchain.extent.into())
             .layer_count(1)
-            .color_attachments(std::slice::from_ref(&colour_attachment_info));
+            .color_attachments(std::slice::from_ref(&colour_attachment_info))
+            .depth_attachment(&depth_attachment_info);
 
         unsafe {
             self.device
@@ -398,7 +424,11 @@ impl VulkanRenderer {
 
             let constants = PushConstants {
                 resolution: glam::Vec2::new(self.width as f32, self.height as f32),
+                time: self.time.elapsed().as_millis() as f32,
             };
+            if self.time.elapsed().as_secs() > 10 {
+                self.time = Instant::now();
+            }
 
             let test = std::slice::from_raw_parts(
                 &constants as *const PushConstants as *const u8,
@@ -518,7 +548,6 @@ impl Drop for VulkanRenderer {
 
             self.vertex_buffer.destroy(&self.allocator);
             self.index_buffer.destroy(&self.allocator);
-            ManuallyDrop::drop(&mut self.allocator);
 
             log::debug!("Dropping pipeline");
             self.pipeline.destroy(&self.device);
@@ -531,7 +560,9 @@ impl Drop for VulkanRenderer {
             log::debug!("Dropping command pool");
             self.command_pool.destroy(&self.device);
 
-            self.swapchain.destroy(&self.device);
+            self.swapchain.destroy(&self.allocator, &self.device);
+
+            ManuallyDrop::drop(&mut self.allocator);
 
             log::debug!("Dropping device");
             self.device.destroy();
@@ -559,4 +590,5 @@ pub struct Vertex {
 #[repr(C)]
 pub struct PushConstants {
     pub resolution: glam::Vec2,
+    pub time: f32,
 }
