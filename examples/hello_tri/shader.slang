@@ -61,5 +61,6 @@ float4 main(VSOutput input)
 
     float3 normal = normalize(input.normal);
     float3 col = normal * 0.5 + 0.5;
+    col = pow(col, 2.2);
     return float4(col, 1.0);
 }

@@ -147,7 +147,7 @@ impl Swapchain {
 
         if present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
             // Seems like the one everyone is using so 🤷‍♂️
-            vk::PresentModeKHR::MAILBOX
+            vk::PresentModeKHR::FIFO
         } else {
             // Guaranteed to be available, so best fallback
             vk::PresentModeKHR::FIFO

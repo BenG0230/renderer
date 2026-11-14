@@ -1,0 +1,92 @@
+# Blender 5.2.3 LTS MTL File: 'Margeship.blend'
+# www.blender.org
+
+newmtl body
+Ns 201.339569
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/body.png
+
+newmtl eyes
+Ns 201.339569
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/scratch/umamusume-gold-ship-race/textures/tex_chr1007_00_eye0.png
+
+newmtl face
+Ns 201.339569
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/body.png
+
+newmtl hair
+Ns 201.339569
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/hair.png
+
+newmtl m_eye
+Ns 360.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/eye.png
+
+newmtl m_face
+Ns 360.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/head.png
+
+newmtl mtl_bdy1007_00.001
+Ns 201.339569
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/body.png
+
+newmtl mtl_chr1007_00_mayu
+Ns 201.339569
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/body.png
+
+newmtl tail
+Ns 201.339569
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd /home/jam/Documents/Models/textures/Marge/tail.png

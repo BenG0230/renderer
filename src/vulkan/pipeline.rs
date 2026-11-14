@@ -16,9 +16,7 @@ pub struct Pipeline {
 
 impl Pipeline {
     pub fn new(swapchain: &Swapchain, device: &Device) -> Result<Self, Box<dyn Error>> {
-        let mut shader_byte = std::fs::File::open(
-            "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/shader.spv",
-        )?;
+        let mut shader_byte = std::fs::File::open("./examples/hello_tri/shader.spv")?;
         let shader_source = ash::util::read_spv(&mut shader_byte)?;
 
         let shader_create_info = vk::ShaderModuleCreateInfo::default().code(&shader_source);

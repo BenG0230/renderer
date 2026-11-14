@@ -139,7 +139,7 @@ impl VulkanRenderer {
     }
     fn load_model() -> (Vec<Vertex>, Vec<u32>) {
         let (models, materials) = tobj::load_obj(
-            "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.obj",
+            "./examples/hello_tri/Margeship.obj",
             &tobj::GPU_LOAD_OPTIONS,
         )
         .unwrap();
@@ -151,6 +151,12 @@ impl VulkanRenderer {
 
         for (i, m) in models.iter().enumerate() {
             let mesh = &m.mesh;
+            log::info!(
+                "Mesh data = {}-{}-{}",
+                mesh.positions.len(),
+                mesh.normals.len(),
+                mesh.texcoords.len()
+            );
             if mesh.positions.len() != mesh.normals.len() {
                 log::error!(
                     "Error reading mesh '{}', Positions and normals have different lengths",
