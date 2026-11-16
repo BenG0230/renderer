@@ -141,6 +141,19 @@ impl VulkanRenderer {
     }
 
     fn load_model() -> (Vec<Vertex>, Vec<u32>) {
+        // let obj_bytes = include_bytes!(
+        //     "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.obj"
+        // );
+        // let mtl_bytes = include_bytes!(
+        //     "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.mtl"
+        // );
+        //
+        // let (models, material) = tobj::load_obj_buf(
+        //     &mut std::io::Cursor::new(obj_bytes),
+        //     &tobj::GPU_LOAD_OPTIONS,
+        //     |_| tobj::load_mtl_buf(&mut std::io::Cursor::new(mtl_bytes)),
+        // )
+        // .unwrap();
         let (models, materials) = tobj::load_obj(
             "./examples/hello_tri/Homermusume.obj",
             &tobj::GPU_LOAD_OPTIONS,
@@ -156,8 +169,10 @@ impl VulkanRenderer {
             let mesh = &m.mesh;
             if mesh.positions.len() != mesh.normals.len() {
                 log::error!(
-                    "Error reading mesh '{}', Positions and normals have different lengths",
-                    m.name
+                    "Error reading mesh '{}', Positions and normals have different lengths\n{}-{}",
+                    m.name,
+                    mesh.positions.len(),
+                    mesh.normals.len()
                 );
                 continue;
             }
