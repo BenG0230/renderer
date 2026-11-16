@@ -155,7 +155,7 @@ impl VulkanRenderer {
         // )
         // .unwrap();
         let (models, materials) = tobj::load_obj(
-            "./examples/hello_tri/Homermusume.obj",
+            "./examples/hello_tri/Margeship.obj",
             &tobj::GPU_LOAD_OPTIONS,
         )
         .unwrap();

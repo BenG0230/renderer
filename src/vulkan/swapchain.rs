@@ -126,7 +126,7 @@ impl Swapchain {
     }
 
     fn choose_swapchain_surface_format(formats: &[vk::SurfaceFormatKHR]) -> vk::SurfaceFormatKHR {
-        // Should always have a R8G8B8A8_SRGB and SRGB_NONLINEAR format (says how to vulkan 2026)
+        // Should always have a R8G8B8A8_SRGB and SRGB_NONLINEAR format available (says how to vulkan 2026)
         *formats
             .iter()
             .find(|f| {
@@ -145,9 +145,9 @@ impl Swapchain {
         // MAILBOX - If the queue is full, replace images in the queue instead of blocking the
         //        program (triple buffering)
 
-        if present_modes.contains(&vk::PresentModeKHR::IMMEDIATE) {
+        if present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
             // Seems like the one everyone is using so 🤷‍♂️
-            vk::PresentModeKHR::IMMEDIATE
+            vk::PresentModeKHR::MAILBOX
         } else {
             // Guaranteed to be available, so best fallback
             vk::PresentModeKHR::FIFO

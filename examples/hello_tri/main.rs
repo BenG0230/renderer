@@ -12,9 +12,6 @@ use winit::{
 struct App {
     renderer: Option<Renderer>, // Comes first to destroy first on drop
     window: Option<Window>,
-
-    frames: u64,
-    last: std::time::Instant,
 }
 
 impl App {
@@ -22,8 +19,6 @@ impl App {
         Self {
             renderer: None,
             window: None,
-            frames: 0,
-            last: Instant::now(),
         }
     }
 }
@@ -64,18 +59,11 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
-                self.frames += 1;
                 if let Some(renderer) = &mut self.renderer {
                     if let Err(e) = renderer.render() {
                         eprintln!("{e}");
                         event_loop.exit();
                     }
-                }
-
-                if self.last.elapsed() >= std::time::Duration::from_secs(1) {
-                    log::info!("{}fps", self.frames);
-                    self.frames = 0;
-                    self.last = Instant::now();
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
