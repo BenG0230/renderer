@@ -9,3 +9,5 @@ pub(self) mod pipeline;
 pub(self) mod surface;
 pub(self) mod swapchain;
 pub(self) mod sync;
+
+pub(self) mod models;

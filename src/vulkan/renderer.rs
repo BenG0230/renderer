@@ -14,20 +14,6 @@ use crate::vulkan::swapchain::Swapchain;
 use crate::vulkan::{debug::DebugMessenger, device::Device};
 
 const FRAMES_IN_FLIGHT: u32 = 2;
-// const VERTICES: [Vertex; 3] = [
-//     Vertex {
-//         pos: [-1.0, -1.0],
-//         color: [1.0, 0.0, 0.0],
-//     },
-//     Vertex {
-//         pos: [1.0, -1.0],
-//         color: [0.0, 1.0, 0.0],
-//     },
-//     Vertex {
-//         pos: [0.0, 1.0],
-//         color: [0.0, 0.0, 1.0],
-//     },
-// ];
 
 pub(crate) struct VulkanRenderer {
     _entry: Entry,
