@@ -145,9 +145,9 @@ impl Swapchain {
         // MAILBOX - If the queue is full, replace images in the queue instead of blocking the
         //        program (triple buffering)
 
-        if present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
+        if present_modes.contains(&vk::PresentModeKHR::IMMEDIATE) {
             // Seems like the one everyone is using so 🤷‍♂️
-            vk::PresentModeKHR::MAILBOX
+            vk::PresentModeKHR::IMMEDIATE
         } else {
             // Guaranteed to be available, so best fallback
             vk::PresentModeKHR::FIFO
