@@ -166,7 +166,6 @@ impl VulkanRenderer {
             }
 
             for vi in 0..mesh.positions.len() / 3 {
-                log::info!("{:#?}", mesh.positions[vi * 3 + 2] + 1.0);
                 vertices.push(Vertex {
                     pos: glam::Vec3::new(
                         mesh.positions[vi * 3],
