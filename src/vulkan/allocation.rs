@@ -37,7 +37,7 @@ impl Buffer {
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let alloc_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::Auto,
+            usage: vk_mem::MemoryUsage::AutoPreferDevice,
             flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
                 | vk_mem::AllocationCreateFlags::MAPPED,
             ..Default::default()
@@ -70,7 +70,7 @@ impl Buffer {
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let alloc_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::Auto,
+            usage: vk_mem::MemoryUsage::AutoPreferDevice,
             flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
                 | vk_mem::AllocationCreateFlags::MAPPED,
             ..Default::default()
@@ -114,7 +114,7 @@ impl Image {
     ) -> Result<Self, Box<dyn Error>> {
         log::debug!("allocating image");
         let alloc_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::Auto,
+            usage: vk_mem::MemoryUsage::AutoPreferDevice,
             flags: vk_mem::AllocationCreateFlags::DEDICATED_MEMORY,
             ..Default::default()
         };

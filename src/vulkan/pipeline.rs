@@ -56,6 +56,11 @@ impl Pipeline {
                 .binding(0)
                 .format(vk::Format::R32G32B32_SFLOAT)
                 .offset(offset_of!(Vertex, normal) as u32),
+            vk::VertexInputAttributeDescription::default()
+                .location(2)
+                .binding(0)
+                .format(vk::Format::R32G32_SFLOAT)
+                .offset(offset_of!(Vertex, uv) as u32),
         ];
 
         let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default()

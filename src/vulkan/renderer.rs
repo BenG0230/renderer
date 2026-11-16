@@ -45,6 +45,7 @@ pub(crate) struct VulkanRenderer {
     frames: Vec<Frame>,
     image_fences: Vec<vk::Fence>,
     current_frame: usize,
+    current_image_index: usize,
 
     pipeline: Pipeline,
 
@@ -125,6 +126,7 @@ impl VulkanRenderer {
             frames,
             image_fences,
             current_frame: 0,
+            current_image_index: 0,
             pipeline,
             allocator,
             vertex_buffer,
@@ -137,9 +139,10 @@ impl VulkanRenderer {
             time: Instant::now(),
         })
     }
+
     fn load_model() -> (Vec<Vertex>, Vec<u32>) {
         let (models, materials) = tobj::load_obj(
-            "./examples/hello_tri/Margeship.obj",
+            "./examples/hello_tri/Homermusume.obj",
             &tobj::GPU_LOAD_OPTIONS,
         )
         .unwrap();
@@ -151,12 +154,6 @@ impl VulkanRenderer {
 
         for (i, m) in models.iter().enumerate() {
             let mesh = &m.mesh;
-            log::info!(
-                "Mesh data = {}-{}-{}",
-                mesh.positions.len(),
-                mesh.normals.len(),
-                mesh.texcoords.len()
-            );
             if mesh.positions.len() != mesh.normals.len() {
                 log::error!(
                     "Error reading mesh '{}', Positions and normals have different lengths",
@@ -166,7 +163,6 @@ impl VulkanRenderer {
             }
 
             for vi in 0..mesh.positions.len() / 3 {
-                log::info!("{:#?}", mesh.positions[vi * 3 + 2] + 1.0);
                 vertices.push(Vertex {
                     pos: glam::Vec3::new(
                         mesh.positions[vi * 3],
@@ -178,6 +174,7 @@ impl VulkanRenderer {
                         mesh.normals[vi * 3 + 1],
                         mesh.normals[vi * 3 + 2],
                     ),
+                    uv: glam::Vec2::new(mesh.texcoords[vi * 2], mesh.texcoords[vi * 2 + 1]),
                 });
             }
 
@@ -246,12 +243,67 @@ impl VulkanRenderer {
         (layer_names, layer_name_ptrs)
     }
 
-    pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
+    // === Rendering ===
+
+    pub fn begin_frame(&mut self) -> Result<(), Box<dyn Error>> {
         if self.width == 0 || self.height == 0 {
+            // Dont want to render to nothing
             return Ok(());
         }
 
-        // 10ms debounce time
+        self.recreate_swapchain()?;
+
+        // Get the next frame and wait for its fence to be down
+        let frame = &self.frames[self.current_frame];
+        unsafe {
+            self.device.device.wait_for_fences(
+                std::slice::from_ref(&frame.in_flight_fence),
+                true,
+                u64::MAX,
+            )?
+        };
+
+        // Get the next swapchain image and wait ffor its fence to be down
+        let (image_index, _) = unsafe {
+            self.swapchain.loader.acquire_next_image(
+                self.swapchain.swapchain,
+                u64::MAX,
+                frame.image_available,
+                vk::Fence::null(),
+            )?
+        };
+        let image_fence = self.image_fences[image_index as usize];
+        if image_fence != vk::Fence::null() {
+            unsafe {
+                self.device.device.wait_for_fences(
+                    std::slice::from_ref(&image_fence),
+                    true,
+                    u64::MAX,
+                )?
+            };
+        }
+        self.current_image_index = image_index as usize;
+        // attach frame fence to the swapchain image
+
+        self.image_fences[image_index as usize] = frame.in_flight_fence;
+
+        // reset and begin frame command buffer
+        let command_buffer = frame.command_buffer;
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe {
+            self.device
+                .device
+                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?;
+            self.device
+                .device
+                .begin_command_buffer(command_buffer, &begin_info)?;
+        };
+
+        self.begin_render_pass(command_buffer, image_index)
+    }
+
+    fn recreate_swapchain(&mut self) -> Result<(), Box<dyn Error>> {
+        // 150ms debounce time to stop excessive swapchain creation
         if self.resize_requested && self.resize_request_time.elapsed() > Duration::from_millis(150)
         {
             // wait for device to be idle to create new swapchain and destroy old one
@@ -273,49 +325,55 @@ impl VulkanRenderer {
             self.resize_requested = false;
         }
 
-        let frame = &self.frames[self.current_frame];
-        unsafe {
-            self.device.device.wait_for_fences(
-                std::slice::from_ref(&frame.in_flight_fence),
-                true,
-                u64::MAX,
-            )?
-        };
+        Ok(())
+    }
 
-        let (image_index, _) = unsafe {
-            self.swapchain.loader.acquire_next_image(
-                self.swapchain.swapchain,
-                u64::MAX,
-                frame.image_available,
-                vk::Fence::null(),
-            )?
-        };
-        let image_fence = self.image_fences[image_index as usize];
-        if image_fence != vk::Fence::null() {
-            unsafe {
-                self.device.device.wait_for_fences(
-                    std::slice::from_ref(&image_fence),
-                    true,
-                    u64::MAX,
-                )?
-            };
-        }
-        self.image_fences[image_index as usize] = frame.in_flight_fence;
+    fn begin_render_pass(
+        &self,
+        command_buffer: vk::CommandBuffer,
+        image_index: u32,
+    ) -> Result<(), Box<dyn Error>> {
+        // set up render info to clear both images
+        let colour_attachment_info = vk::RenderingAttachmentInfo::default()
+            .image_view(self.swapchain.image_views[image_index as usize])
+            .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::STORE)
+            .clear_value(vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 1.0],
+                },
+            });
+        let depth_attachment_info = vk::RenderingAttachmentInfo::default()
+            .image_view(self.swapchain.depth_image_views[image_index as usize])
+            .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
+            .load_op(vk::AttachmentLoadOp::CLEAR)
+            .store_op(vk::AttachmentStoreOp::DONT_CARE)
+            .clear_value(vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 1.0,
+                    stencil: 0,
+                },
+            });
 
-        let command_buffer = frame.command_buffer;
+        let rendering_info = vk::RenderingInfo::default()
+            .render_area(self.swapchain.extent.into())
+            .layer_count(1)
+            .color_attachments(std::slice::from_ref(&colour_attachment_info))
+            .depth_attachment(&depth_attachment_info);
+
+        self.barrier_rendering_images(command_buffer, image_index);
         unsafe {
             self.device
                 .device
-                .reset_command_buffer(command_buffer, vk::CommandBufferResetFlags::empty())?
+                .cmd_begin_rendering(command_buffer, &rendering_info)
         };
+        self.viewport_and_scissors(command_buffer);
 
-        let begin_info = vk::CommandBufferBeginInfo::default();
-        unsafe {
-            self.device
-                .device
-                .begin_command_buffer(command_buffer, &begin_info)?
-        };
+        Ok(())
+    }
 
+    fn barrier_rendering_images(&self, command_buffer: vk::CommandBuffer, image_index: u32) {
         let image_barriers = [
             vk::ImageMemoryBarrier2::default()
                 .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
@@ -357,41 +415,9 @@ impl VulkanRenderer {
                 .device
                 .cmd_pipeline_barrier2(command_buffer, &dependency_info)
         };
+    }
 
-        let colour_attachment_info = vk::RenderingAttachmentInfo::default()
-            .image_view(self.swapchain.image_views[image_index as usize])
-            .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::STORE)
-            .clear_value(vk::ClearValue {
-                color: vk::ClearColorValue {
-                    float32: [0.0, 0.0, 0.0, 1.0],
-                },
-            });
-        let depth_attachment_info = vk::RenderingAttachmentInfo::default()
-            .image_view(self.swapchain.depth_image_views[image_index as usize])
-            .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
-            .load_op(vk::AttachmentLoadOp::CLEAR)
-            .store_op(vk::AttachmentStoreOp::DONT_CARE)
-            .clear_value(vk::ClearValue {
-                depth_stencil: vk::ClearDepthStencilValue {
-                    depth: 1.0,
-                    stencil: 0,
-                },
-            });
-
-        let rendering_info = vk::RenderingInfo::default()
-            .render_area(self.swapchain.extent.into())
-            .layer_count(1)
-            .color_attachments(std::slice::from_ref(&colour_attachment_info))
-            .depth_attachment(&depth_attachment_info);
-
-        unsafe {
-            self.device
-                .device
-                .cmd_begin_rendering(command_buffer, &rendering_info)
-        };
-
+    fn viewport_and_scissors(&self, command_buffer: vk::CommandBuffer) {
         let vp = vk::Viewport::default()
             .x(0.0)
             .y(self.swapchain.extent.height as f32)
@@ -408,56 +434,11 @@ impl VulkanRenderer {
                 .device
                 .cmd_set_scissor(command_buffer, 0, std::slice::from_ref(&scissor));
         }
+    }
 
-        unsafe {
-            self.device.device.cmd_bind_pipeline(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.pipeline,
-            );
-            self.device.device.cmd_bind_vertex_buffers(
-                command_buffer,
-                0,
-                std::slice::from_ref(&self.vertex_buffer.buffer),
-                &[0],
-            );
-            self.device.device.cmd_bind_index_buffer(
-                command_buffer,
-                self.index_buffer.buffer,
-                0,
-                vk::IndexType::UINT32,
-            );
-
-            let constants = PushConstants {
-                resolution: glam::Vec2::new(self.width as f32, self.height as f32),
-                time: self.time.elapsed().as_millis() as f32,
-            };
-            if self.time.elapsed().as_secs() > 10 {
-                self.time = Instant::now();
-            }
-
-            let test = std::slice::from_raw_parts(
-                &constants as *const PushConstants as *const u8,
-                size_of::<PushConstants>(),
-            );
-
-            self.device.device.cmd_push_constants(
-                command_buffer,
-                self.pipeline.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                0,
-                &*test,
-            );
-
-            self.device.device.cmd_draw_indexed(
-                command_buffer,
-                self.index_count as u32,
-                1,
-                0,
-                0,
-                0,
-            );
-        }
+    pub fn end_frame(&mut self) -> Result<(), Box<dyn Error>> {
+        let frame = &self.frames[self.current_frame];
+        let command_buffer = frame.command_buffer;
 
         unsafe {
             self.device.device.cmd_end_rendering(command_buffer);
@@ -470,7 +451,7 @@ impl VulkanRenderer {
             .dst_access_mask(vk::AccessFlags2::NONE)
             .old_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
             .new_layout(vk::ImageLayout::PRESENT_SRC_KHR)
-            .image(self.swapchain.images[image_index as usize])
+            .image(self.swapchain.images[self.current_image_index])
             .subresource_range(
                 vk::ImageSubresourceRange::default()
                     .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -497,7 +478,7 @@ impl VulkanRenderer {
             vk::CommandBufferSubmitInfo::default().command_buffer(command_buffer);
 
         let signal_semaphore_info = vk::SemaphoreSubmitInfo::default()
-            .semaphore(self.swapchain.render_finished[image_index as usize])
+            .semaphore(self.swapchain.render_finished[self.current_image_index])
             .stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT);
 
         let submit_info = vk::SubmitInfo2::default()
@@ -519,12 +500,13 @@ impl VulkanRenderer {
 
         self.current_frame = (self.current_frame + 1) % self.frames.len();
 
+        let current_image_u32 = self.current_image_index as u32;
         let present_info = vk::PresentInfoKHR::default()
             .wait_semaphores(std::slice::from_ref(
-                &self.swapchain.render_finished[image_index as usize],
+                &self.swapchain.render_finished[self.current_image_index],
             ))
             .swapchains(std::slice::from_ref(&self.swapchain.swapchain))
-            .image_indices(std::slice::from_ref(&image_index));
+            .image_indices(std::slice::from_ref(&current_image_u32));
 
         unsafe {
             self.swapchain
@@ -534,6 +516,56 @@ impl VulkanRenderer {
 
         Ok(())
     }
+
+    // unsafe {
+    //     self.device.device.cmd_bind_pipeline(
+    //         command_buffer,
+    //         vk::PipelineBindPoint::GRAPHICS,
+    //         self.pipeline.pipeline,
+    //     );
+    //     self.device.device.cmd_bind_vertex_buffers(
+    //         command_buffer,
+    //         0,
+    //         std::slice::from_ref(&self.vertex_buffer.buffer),
+    //         &[0],
+    //     );
+    //     self.device.device.cmd_bind_index_buffer(
+    //         command_buffer,
+    //         self.index_buffer.buffer,
+    //         0,
+    //         vk::IndexType::UINT32,
+    //     );
+    //
+    //     let constants = PushConstants {
+    //         resolution: glam::Vec2::new(self.width as f32, self.height as f32),
+    //         time: self.time.elapsed().as_millis() as f32,
+    //     };
+    //     if self.time.elapsed().as_secs() > 10 {
+    //         self.time = Instant::now();
+    //     }
+    //
+    //     let test = std::slice::from_raw_parts(
+    //         &constants as *const PushConstants as *const u8,
+    //         size_of::<PushConstants>(),
+    //     );
+    //
+    //     self.device.device.cmd_push_constants(
+    //         command_buffer,
+    //         self.pipeline.layout,
+    //         vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+    //         0,
+    //         &*test,
+    //     );
+    //
+    //     self.device.device.cmd_draw_indexed(
+    //         command_buffer,
+    //         self.index_count as u32,
+    //         1,
+    //         0,
+    //         0,
+    //         0,
+    //     );
+    // }
 
     pub fn run(&self) {
         log::info!("Running Application!");
@@ -551,7 +583,6 @@ impl Drop for VulkanRenderer {
             }
 
             // Must drop in reverse order of creation
-
             self.vertex_buffer.destroy(&self.allocator);
             self.index_buffer.destroy(&self.allocator);
 
@@ -591,6 +622,7 @@ impl Drop for VulkanRenderer {
 pub struct Vertex {
     pub pos: glam::Vec3,
     pub normal: glam::Vec3,
+    pub uv: glam::Vec2,
 }
 
 #[repr(C)]

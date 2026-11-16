@@ -27,7 +27,11 @@ impl Renderer {
     }
 
     pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
-        self.vulkan.render()
+        self.vulkan.begin_frame()?;
+
+        self.vulkan.end_frame()?;
+
+        Ok(())
     }
 
     pub fn run(&self) {

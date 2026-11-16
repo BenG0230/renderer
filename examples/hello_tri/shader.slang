@@ -8,12 +8,14 @@ struct VSInput
 {
     float3 pos;
     float3 normal;
+    float2 uv;
 };
 
 struct VSOutput
 {
     float4 pos : SV_POSITION;
     float3 normal;
+    float2 uv;
 };
 
 [[vk::push_constant]]
@@ -48,6 +50,7 @@ VSOutput main(uint vertexID: SV_VertexID, VSInput input)
     output.pos = vertClip - float4(0.0, 1.0, 0.0, 0.0);
     // output.pos = vertClip;
     output.normal = input.normal;
+    output.uv = input.uv;
 
     return output;
 }
@@ -61,6 +64,8 @@ float4 main(VSOutput input)
 
     float3 normal = normalize(input.normal);
     float3 col = normal * 0.5 + 0.5;
-    col = pow(col, 2.2);
+
+    col = float3(input.uv, 0.0);
+    // col = pow(col, 2.2);
     return float4(col, 1.0);
 }
