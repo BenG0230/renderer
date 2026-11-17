@@ -19,10 +19,10 @@ pub struct MeshManager {
     upload_fence: vk::Fence,
 
     vertex_buffer: Buffer,
-    vertex_offset: u64,
+    vertex_offset: u32,
 
     index_buffer: Buffer,
-    index_offset: u64,
+    index_offset: u32,
 
     staging_buffer: Buffer,
 }
@@ -69,12 +69,12 @@ impl MeshManager {
 
         let vertex_copy = vk::BufferCopy::default()
             .src_offset(0)
-            .dst_offset(self.vertex_offset)
+            .dst_offset(self.vertex_offset as u64)
             .size(vertex_size as u64);
 
         let index_copy = vk::BufferCopy::default()
             .src_offset(vertex_size as u64)
-            .dst_offset(self.index_offset)
+            .dst_offset(self.index_offset as u64)
             .size(index_size as u64);
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -120,10 +120,10 @@ impl MeshManager {
                 .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
         }
 
-        let mesh = Mesh::new(index_size, self.index_offset, self.vertex_offset);
+        let mesh = Mesh::new(index_size, self.index_offset, self.vertex_offset as i32);
 
-        self.vertex_offset += vertex_size as u64;
-        self.index_offset += index_size as u64;
+        self.vertex_offset += vertex_size as u32;
+        self.index_offset += index_size as u32;
 
         self.meshes.push(mesh);
         Ok(MeshHandle(self.meshes.len() - 1))
@@ -158,9 +158,23 @@ impl MeshManager {
         Ok(())
     }
 
-    pub fn destroy(&mut self, allocator: &VulkanAllocator) {
+    pub fn get_vertex_buffer(&self) -> vk::Buffer {
+        self.vertex_buffer.buffer
+    }
+
+    pub fn get_index_buffer(&self) -> vk::Buffer {
+        self.index_buffer.buffer
+    }
+
+    pub fn get_mesh(&self, handle: &MeshHandle) -> &Mesh {
+        &self.meshes[handle.0]
+    }
+
+    pub fn destroy(&mut self, device: &Device, allocator: &VulkanAllocator) {
         self.vertex_buffer.destroy(allocator);
         self.index_buffer.destroy(allocator);
         self.staging_buffer.destroy(allocator);
+
+        unsafe { device.device.destroy_fence(self.upload_fence, None) };
     }
 }

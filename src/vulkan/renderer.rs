@@ -130,69 +130,6 @@ impl VulkanRenderer {
         })
     }
 
-    fn load_model() -> (Vec<Vertex>, Vec<u32>) {
-        // let obj_bytes = include_bytes!(
-        //     "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.obj"
-        // );
-        // let mtl_bytes = include_bytes!(
-        //     "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.mtl"
-        // );
-        //
-        // let (models, material) = tobj::load_obj_buf(
-        //     &mut std::io::Cursor::new(obj_bytes),
-        //     &tobj::GPU_LOAD_OPTIONS,
-        //     |_| tobj::load_mtl_buf(&mut std::io::Cursor::new(mtl_bytes)),
-        // )
-        // .unwrap();
-        let (models, materials) = tobj::load_obj(
-            "./examples/hello_tri/Margeship.obj",
-            &tobj::GPU_LOAD_OPTIONS,
-        )
-        .unwrap();
-
-        let mut vertices: Vec<Vertex> = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
-
-        let mut model_index_start = 0;
-
-        for (i, m) in models.iter().enumerate() {
-            let mesh = &m.mesh;
-            if mesh.positions.len() != mesh.normals.len() {
-                log::error!(
-                    "Error reading mesh '{}', Positions and normals have different lengths\n{}-{}",
-                    m.name,
-                    mesh.positions.len(),
-                    mesh.normals.len()
-                );
-                continue;
-            }
-
-            for vi in 0..mesh.positions.len() / 3 {
-                vertices.push(Vertex {
-                    pos: glam::Vec3::new(
-                        mesh.positions[vi * 3],
-                        mesh.positions[vi * 3 + 1],
-                        mesh.positions[vi * 3 + 2],
-                    ),
-                    normal: glam::Vec3::new(
-                        mesh.normals[vi * 3],
-                        mesh.normals[vi * 3 + 1],
-                        mesh.normals[vi * 3 + 2],
-                    ),
-                    uv: glam::Vec2::new(mesh.texcoords[vi * 2], mesh.texcoords[vi * 2 + 1]),
-                });
-            }
-
-            for index in &mesh.indices {
-                indices.push(*index + model_index_start);
-            }
-
-            model_index_start = vertices.len() as u32;
-        }
-
-        (vertices, indices)
-    }
-
     fn create_instance(
         entry: &Entry,
         display_handle: RawDisplayHandle,
@@ -441,6 +378,74 @@ impl VulkanRenderer {
         }
     }
 
+    pub fn bind_pipeline(&mut self) -> Result<(), Box<dyn Error>> {
+        let frame = &self.frames[self.current_frame];
+        let command_buffer = frame.command_buffer;
+        unsafe {
+            self.device.device.cmd_bind_pipeline(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.pipeline,
+            );
+            self.device.device.cmd_bind_vertex_buffers(
+                command_buffer,
+                0,
+                std::slice::from_ref(&self.mesh_manager.get_vertex_buffer()),
+                &[0],
+            );
+            self.device.device.cmd_bind_index_buffer(
+                command_buffer,
+                self.mesh_manager.get_index_buffer(),
+                0,
+                vk::IndexType::UINT32,
+            );
+
+            let constants = PushConstants {
+                resolution: glam::Vec2::new(self.width as f32, self.height as f32),
+                time: self.time.elapsed().as_millis() as f32,
+            };
+            if self.time.elapsed().as_secs() > 10 {
+                self.time = Instant::now();
+            }
+
+            let test = std::slice::from_raw_parts(
+                &constants as *const PushConstants as *const u8,
+                size_of::<PushConstants>(),
+            );
+
+            self.device.device.cmd_push_constants(
+                command_buffer,
+                self.pipeline.layout,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                0,
+                &*test,
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn draw_models(&self) {
+        let frame = &self.frames[self.current_frame];
+        let command_buffer = frame.command_buffer;
+        for model in self.model_manager.get_models() {
+            for mesh_handle in &model.mesh_handles {
+                let mesh = self.mesh_manager.get_mesh(mesh_handle);
+
+                unsafe {
+                    self.device.device.cmd_draw_indexed(
+                        command_buffer,
+                        mesh.index_count as u32,
+                        1,
+                        mesh.first_index,
+                        mesh.vertex_offset,
+                        0,
+                    )
+                };
+            }
+        }
+    }
+
     pub fn end_frame(&mut self) -> Result<(), Box<dyn Error>> {
         let frame = &self.frames[self.current_frame];
         let command_buffer = frame.command_buffer;
@@ -588,7 +593,7 @@ impl Drop for VulkanRenderer {
             }
 
             // Must drop in reverse order of creation
-            self.mesh_manager.destroy(&self.allocator);
+            self.mesh_manager.destroy(&self.device, &self.allocator);
 
             log::debug!("Dropping pipeline");
             self.pipeline.destroy(&self.device);

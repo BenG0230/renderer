@@ -1,12 +1,13 @@
+#[derive(Copy, Clone)]
 pub struct Mesh {
-    index_count: usize,
-    first_index: u64,
+    pub index_count: usize,
+    pub first_index: u32,
 
-    vertex_offset: u64,
+    pub vertex_offset: i32,
 }
 
 impl Mesh {
-    pub fn new(index_count: usize, first_index: u64, vertex_offset: u64) -> Self {
+    pub fn new(index_count: usize, first_index: u32, vertex_offset: i32) -> Self {
         Self {
             index_count,
             first_index,

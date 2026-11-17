@@ -29,6 +29,9 @@ impl Renderer {
     pub fn render(&mut self) -> Result<(), Box<dyn Error>> {
         self.vulkan.begin_frame()?;
 
+        self.vulkan.bind_pipeline()?;
+        self.vulkan.draw_models();
+
         self.vulkan.end_frame()?;
 
         Ok(())

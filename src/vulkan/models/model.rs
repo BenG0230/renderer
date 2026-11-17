@@ -1,7 +1,7 @@
 use crate::vulkan::models::mesh_manager::MeshHandle;
 
 pub struct Model {
-    mesh_handles: Vec<MeshHandle>,
+    pub mesh_handles: Vec<MeshHandle>,
 }
 
 impl Model {

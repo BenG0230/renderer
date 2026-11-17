@@ -96,4 +96,8 @@ impl ModelManager {
 
         Ok(model)
     }
+
+    pub fn get_models(&self) -> &Vec<Model> {
+        &self.models
+    }
 }
