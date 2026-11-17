@@ -94,8 +94,7 @@ impl VulkanRenderer {
             MeshManager::new(&allocator, &device, cmd_buffers[FRAMES_IN_FLIGHT as usize])?;
         let mut model_manager = ModelManager::new();
 
-        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.obj"), &mut mesh_manager, &allocator, &device)?;
-        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
+        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/dragon.obj"), &mut mesh_manager, &allocator, &device)?;
 
         let mut frames = Vec::new();
         for i in 0..FRAMES_IN_FLIGHT {

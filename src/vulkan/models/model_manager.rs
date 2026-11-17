@@ -63,7 +63,7 @@ impl ModelManager {
         let mut mesh_handles: Vec<MeshHandle> = Vec::new();
         let (models, _materials) = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS)?;
 
-        for (i, m) in models.iter().enumerate() {
+        for (_, m) in models.iter().enumerate() {
             let mesh = &m.mesh;
 
             let mut vertices: Vec<Vertex> = Vec::new();
