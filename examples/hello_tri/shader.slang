@@ -47,8 +47,8 @@ VSOutput main(uint vertexID: SV_VertexID, VSInput input)
     float4 vertClip = float4(vertView.xy, depth, 1);
     vertClip.x *= pc.resolution.y / pc.resolution.x;
 
-    output.pos = vertClip - float4(0.0, 1.0, 0.0, 0.0);
-    // output.pos = vertClip;
+    // output.pos = vertClip - float4(0.0, 1.0, 0.0, 0.0);
+    output.pos = vertClip;
     output.normal = input.normal;
     output.uv = input.uv;
 
@@ -63,9 +63,10 @@ float4 main(VSOutput input)
     float2 screenUV = pixelCoord / pc.resolution;
 
     float3 normal = normalize(input.normal);
-    float3 col = normal * 0.5 + 0.5;
+    // float3 col = normal * 0.5 + 0.5;
 
-    col = float3(input.uv, 0.0);
-    // col = pow(col, 2.2);
+    float3 col = float3(dot(normal, light_dir) * 0.5 + 0.5);
+    // col = float3(input.normal, 0.0);
+    col = pow(col, 2.2);
     return float4(col, 1.0);
 }

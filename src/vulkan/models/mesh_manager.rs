@@ -61,10 +61,17 @@ impl MeshManager {
         vertices: &[Vertex],
         indices: &[u32],
     ) -> Result<MeshHandle, Box<dyn Error>> {
-        log::debug!("MESH VERTEX - {}", vertices.len());
-        log::debug!("MESH INDEX - {}", indices.len());
         let vertex_size = size_of::<Vertex>() * vertices.len();
         let index_size = size_of::<u32>() * indices.len();
+
+        if vertex_size > 100 * 1024 * 1024 || index_size > 32 * 1024 * 1024 {
+            return Err(format!(
+                "Model too large! vertex {}MB index {}MB",
+                vertex_size / (1024 * 1024),
+                index_size / (1024 * 1024)
+            )
+            .into());
+        }
 
         self.copy_to_staging(allocator, vertices, 0)?;
         self.copy_to_staging(allocator, indices, vertex_size)?;
@@ -154,11 +161,11 @@ impl MeshManager {
                 size_of::<T>() * data.len(),
             );
 
-            // allocator.allocator.flush_allocation(
-            //     &mut self.staging_buffer.allocation,
-            //     offset as u64,
-            //     (size_of::<T>() * data.len()) as u64,
-            // )?;
+            allocator.allocator.flush_allocation(
+                &mut self.staging_buffer.allocation,
+                offset as u64,
+                (size_of::<T>() * data.len()) as u64,
+            )?;
         };
 
         unsafe {

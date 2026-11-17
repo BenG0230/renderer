@@ -47,8 +47,8 @@ impl ModelManager {
 
         let model = Self::load_model_data(path, mesh_manager, allocator, device)?;
 
-        let handle = ModelHandle(self.models.len() - 1);
         self.models.push(model);
+        let handle = ModelHandle(self.models.len() - 1);
         self.loaded_models.insert(path.to_path_buf(), handle);
 
         Ok(ModelHandle(self.models.len() - 1))
@@ -72,27 +72,36 @@ impl ModelManager {
             for vi in 0..mesh.positions.len() / 3 {
                 let vertex_normal_index = vi * 3;
                 let uv_index = vi * 2;
-                vertices.push(Vertex {
-                    pos: Vec3::new(
-                        mesh.positions[vertex_normal_index],
-                        mesh.positions[vertex_normal_index + 1],
-                        mesh.positions[vertex_normal_index + 2],
-                    ),
-                    normal: Vec3::new(
+
+                let pos = Vec3::new(
+                    mesh.positions[vertex_normal_index],
+                    mesh.positions[vertex_normal_index + 1],
+                    mesh.positions[vertex_normal_index + 2],
+                );
+
+                let normal = if mesh.normals.len() != 0 {
+                    Vec3::new(
                         mesh.normals[vertex_normal_index],
                         mesh.normals[vertex_normal_index + 1],
                         mesh.normals[vertex_normal_index + 2],
-                    ),
-                    uv: Vec2::new(mesh.texcoords[uv_index], mesh.texcoords[uv_index + 1]),
-                })
+                    )
+                } else {
+                    Vec3::ZERO
+                };
+
+                let uv = if mesh.texcoords.len() != 0 {
+                    Vec2::new(mesh.texcoords[uv_index], mesh.texcoords[uv_index + 1])
+                } else {
+                    Vec2::ZERO
+                };
+
+                vertices.push(Vertex { pos, normal, uv })
             }
 
             for index in &mesh.indices {
                 indices.push(*index);
             }
 
-            log::debug!("MODLE _ MESH VERTEX - {}", vertices.len());
-            log::debug!("MODEL _MESH INDEX - {}", indices.len());
             mesh_handles.push(mesh_manager.load_mesh(allocator, device, &vertices, &indices)?);
         }
 

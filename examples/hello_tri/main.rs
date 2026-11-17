@@ -1,10 +1,10 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use renderer::renderer::Renderer;
 use winit::{
     application::ApplicationHandler,
     event::WindowEvent,
-    event_loop::EventLoop,
+    event_loop::{ControlFlow, EventLoop},
     keyboard::{Key, NamedKey},
     window::Window,
 };
@@ -64,18 +64,11 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::RedrawRequested => {
-                self.frames += 1;
                 if let Some(renderer) = &mut self.renderer {
                     if let Err(e) = renderer.render() {
                         eprintln!("{e}");
                         event_loop.exit();
                     }
-                }
-
-                if self.last.elapsed() >= std::time::Duration::from_secs(1) {
-                    log::info!("{}fps", self.frames);
-                    self.frames = 0;
-                    self.last = Instant::now();
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
@@ -89,8 +82,15 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.frames += 1;
         if let Some(window) = &mut self.window {
             window.request_redraw();
+        }
+
+        if self.last.elapsed() >= std::time::Duration::from_secs(1) {
+            log::info!("{}fps", self.frames);
+            self.frames = 0;
+            self.last = Instant::now();
         }
     }
 }
@@ -98,6 +98,7 @@ impl ApplicationHandler for App {
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
+    event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = App::new();
     match event_loop.run_app(&mut app) {
         Err(e) => eprintln!("{}", e),

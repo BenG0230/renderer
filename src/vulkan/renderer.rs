@@ -27,16 +27,16 @@ pub(crate) struct VulkanRenderer {
     swapchain: Swapchain,
 
     surface: Surface,
-    debug_messenger: Option<DebugMessenger>,
 
     command_pool: Command,
 
+    pipeline: Pipeline,
+
     frames: Vec<Frame>,
     image_fences: Vec<vk::Fence>,
+
     current_frame: usize,
     current_image_index: usize,
-
-    pipeline: Pipeline,
 
     allocator: ManuallyDrop<VulkanAllocator>,
 
@@ -49,6 +49,8 @@ pub(crate) struct VulkanRenderer {
     pub height: u32,
 
     time: Instant,
+
+    debug_messenger: Option<DebugMessenger>,
 }
 
 impl VulkanRenderer {
@@ -94,7 +96,7 @@ impl VulkanRenderer {
             MeshManager::new(&allocator, &device, cmd_buffers[FRAMES_IN_FLIGHT as usize])?;
         let mut model_manager = ModelManager::new();
 
-        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/dragon.obj"), &mut mesh_manager, &allocator, &device)?;
+        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Bunny.obj"), &mut mesh_manager, &allocator, &device)?;
 
         let mut frames = Vec::new();
         for i in 0..FRAMES_IN_FLIGHT {
@@ -287,7 +289,7 @@ impl VulkanRenderer {
                 },
             });
         let depth_attachment_info = vk::RenderingAttachmentInfo::default()
-            .image_view(self.swapchain.depth_image_views[image_index as usize])
+            .image_view(self.swapchain.depth_images[image_index as usize].image_view)
             .image_layout(vk::ImageLayout::ATTACHMENT_OPTIMAL)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::DONT_CARE)
