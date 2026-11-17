@@ -22,24 +22,19 @@ impl VulkanAllocator {
 
 pub struct Buffer {
     pub buffer: vk::Buffer,
-    allocation: vk_mem::Allocation,
+    pub allocation: vk_mem::Allocation,
 }
 
 impl Buffer {
-    pub fn vertex_buffer(
-        allocator: &VulkanAllocator,
-        data: &[super::renderer::Vertex],
-    ) -> Result<Self, Box<dyn Error>> {
+    pub fn vertex_buffer(allocator: &VulkanAllocator, size: u64) -> Result<Self, Box<dyn Error>> {
         log::debug!("Allocating vertex buffer");
         let buffer_info = vk::BufferCreateInfo::default()
-            .size((size_of::<super::renderer::Vertex>() * data.len()) as u64)
-            .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+            .size(size as u64)
+            .usage(vk::BufferUsageFlags::VERTEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let alloc_info = vk_mem::AllocationCreateInfo {
             usage: vk_mem::MemoryUsage::AutoPreferDevice,
-            flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
-                | vk_mem::AllocationCreateFlags::MAPPED,
             ..Default::default()
         };
 
@@ -48,31 +43,19 @@ impl Buffer {
                 .allocator
                 .create_buffer(&buffer_info, &alloc_info)?
         };
-
-        let info = allocator.allocator.get_allocation_info(&allocation);
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr() as *const u8,
-                info.mapped_data as *mut u8,
-                size_of::<super::renderer::Vertex>() * data.len(),
-            );
-        }
 
         Ok(Self { buffer, allocation })
     }
 
-    pub fn index_buffer(allocator: &VulkanAllocator, data: &[u32]) -> Result<Self, Box<dyn Error>> {
+    pub fn index_buffer(allocator: &VulkanAllocator, size: u64) -> Result<Self, Box<dyn Error>> {
         log::debug!("Allocating index buffer");
         let buffer_info = vk::BufferCreateInfo::default()
-            .size((size_of::<u32>() * data.len()) as u64)
-            .usage(vk::BufferUsageFlags::INDEX_BUFFER)
+            .size(size)
+            .usage(vk::BufferUsageFlags::INDEX_BUFFER | vk::BufferUsageFlags::TRANSFER_DST)
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let alloc_info = vk_mem::AllocationCreateInfo {
             usage: vk_mem::MemoryUsage::AutoPreferDevice,
-            flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE
-                | vk_mem::AllocationCreateFlags::MAPPED,
             ..Default::default()
         };
         let (buffer, allocation) = unsafe {
@@ -81,15 +64,28 @@ impl Buffer {
                 .create_buffer(&buffer_info, &alloc_info)?
         };
 
-        let info = allocator.allocator.get_allocation_info(&allocation);
+        Ok(Self { buffer, allocation })
+    }
 
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                data.as_ptr() as *const u8,
-                info.mapped_data as *mut u8,
-                size_of::<u32>() * data.len(),
-            );
-        }
+    pub fn staging_buffer(allocator: &VulkanAllocator, size: u64) -> Result<Self, Box<dyn Error>> {
+        log::debug!("Allocating staging buffer");
+        let buffer_info = vk::BufferCreateInfo::default()
+            .size(size)
+            .usage(vk::BufferUsageFlags::TRANSFER_SRC)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+        let alloc_info = vk_mem::AllocationCreateInfo {
+            usage: vk_mem::MemoryUsage::Auto,
+            flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE,
+            ..Default::default()
+        };
+
+        let (buffer, allocation) = unsafe {
+            allocator
+                .allocator
+                .create_buffer(&buffer_info, &alloc_info)?
+        };
+
         Ok(Self { buffer, allocation })
     }
 

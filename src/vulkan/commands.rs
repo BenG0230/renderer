@@ -24,12 +24,12 @@ impl Command {
     pub fn allocate_buffer(
         &self,
         device: &Device,
-        frames_in_flight: u32,
+        number: u32,
     ) -> Result<Vec<vk::CommandBuffer>, Box<dyn Error>> {
-        log::debug!("Allocating {frames_in_flight} command buffers");
+        log::debug!("Allocating {number} command buffers");
         let allocate_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(self.pool)
-            .command_buffer_count(frames_in_flight);
+            .command_buffer_count(number);
 
         let buffers = unsafe { device.device.allocate_command_buffers(&allocate_info)? };
 

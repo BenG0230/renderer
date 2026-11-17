@@ -7,6 +7,8 @@ use std::{
 use glam::{Vec2, Vec3};
 
 use crate::vulkan::{
+    allocation::VulkanAllocator,
+    device::Device,
     models::{
         mesh_manager::{MeshHandle, MeshManager},
         model::Model,
@@ -14,9 +16,8 @@ use crate::vulkan::{
     renderer::Vertex,
 };
 
-pub struct ModelHandle {
-    index: usize,
-}
+#[derive(Clone, Copy)]
+pub struct ModelHandle(usize);
 
 pub struct ModelManager {
     models: Vec<Model>,
@@ -31,21 +32,33 @@ impl ModelManager {
         }
     }
 
-    pub fn load_model(&mut self, path: &Path) -> Result<ModelHandle, Box<dyn Error>> {
+    pub fn load_model(
+        &mut self,
+        path: &Path,
+        mesh_manager: &mut MeshManager,
+        allocator: &VulkanAllocator,
+        device: &Device,
+    ) -> Result<ModelHandle, Box<dyn Error>> {
         let path = &path.canonicalize()?;
 
         if let Some(handle) = self.loaded_models.get(path) {
             return Ok(*handle);
         }
 
-        let model_data = Self::load_model_data(path)?;
+        let model = Self::load_model_data(path, mesh_manager, allocator, device)?;
+
+        self.models.push(model);
+
+        Ok(ModelHandle(self.models.len() - 1))
     }
 
     fn load_model_data(
         path: &PathBuf,
         mesh_manager: &mut MeshManager,
-    ) -> Result<(), Box<dyn Error>> {
-        let mesh_handles: Vec<MeshHandle> = Vec::new();
+        allocator: &VulkanAllocator,
+        device: &Device,
+    ) -> Result<Model, Box<dyn Error>> {
+        let mut mesh_handles: Vec<MeshHandle> = Vec::new();
         let (models, _materials) = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS)?;
 
         for (_, m) in models.iter().enumerate() {
@@ -68,7 +81,7 @@ impl ModelManager {
                         mesh.normals[vertex_normal_index + 1],
                         mesh.normals[vertex_normal_index + 2],
                     ),
-                    uv: Vec2::new(mesh.texcoords[uv_index], mesh.texcoords[uv_index * 2]),
+                    uv: Vec2::new(mesh.texcoords[uv_index], mesh.texcoords[uv_index + 1]),
                 })
             }
 
@@ -76,9 +89,11 @@ impl ModelManager {
                 indices.push(*index);
             }
 
-            mesh_manager.load_mesh(vertices, indices)?;
+            mesh_handles.push(mesh_manager.load_mesh(allocator, device, &vertices, &indices)?);
         }
 
-        Ok(())
+        let model = Model::new(mesh_handles);
+
+        Ok(model)
     }
 }

@@ -1,4 +1,5 @@
 use std::mem::ManuallyDrop;
+use std::path::Path;
 use std::time::{Duration, Instant};
 use std::{error::Error, ffi::CString};
 
@@ -8,6 +9,8 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle};
 use crate::vulkan::allocation::{Buffer, VulkanAllocator};
 use crate::vulkan::commands::Command;
 use crate::vulkan::frame::Frame;
+use crate::vulkan::models::mesh_manager::MeshManager;
+use crate::vulkan::models::model_manager::ModelManager;
 use crate::vulkan::pipeline::Pipeline;
 use crate::vulkan::surface::Surface;
 use crate::vulkan::swapchain::Swapchain;
@@ -36,9 +39,10 @@ pub(crate) struct VulkanRenderer {
     pipeline: Pipeline,
 
     allocator: ManuallyDrop<VulkanAllocator>,
-    vertex_buffer: Buffer,
-    index_buffer: Buffer,
-    index_count: usize,
+
+    mesh_manager: MeshManager,
+    model_manager: ModelManager,
+
     pub resize_requested: bool,
     pub resize_request_time: Instant,
     pub width: u32,
@@ -84,7 +88,13 @@ impl VulkanRenderer {
         )?;
 
         let command_pool = Command::new(&device)?;
-        let cmd_buffers = command_pool.allocate_buffer(&device, FRAMES_IN_FLIGHT)?;
+        let cmd_buffers = command_pool.allocate_buffer(&device, FRAMES_IN_FLIGHT + 1)?;
+
+        let mut mesh_manager =
+            MeshManager::new(&allocator, &device, cmd_buffers[FRAMES_IN_FLIGHT as usize])?;
+        let mut model_manager = ModelManager::new();
+
+        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
 
         let mut frames = Vec::new();
         for i in 0..FRAMES_IN_FLIGHT {
@@ -95,11 +105,6 @@ impl VulkanRenderer {
         let image_fences = vec![vk::Fence::null(); swapchain.images.len()];
 
         let pipeline = Pipeline::new(&swapchain, &device)?;
-
-        let (vertices, indices) = Self::load_model();
-
-        let vertex_buffer = Buffer::vertex_buffer(&allocator, &vertices)?;
-        let index_buffer = Buffer::index_buffer(&allocator, &indices)?;
 
         Ok(Self {
             _entry: entry,
@@ -115,9 +120,8 @@ impl VulkanRenderer {
             current_image_index: 0,
             pipeline,
             allocator,
-            vertex_buffer,
-            index_buffer,
-            index_count: indices.len(),
+            mesh_manager,
+            model_manager,
             resize_requested: false,
             resize_request_time: Instant::now(),
             width,
@@ -442,56 +446,6 @@ impl VulkanRenderer {
         let command_buffer = frame.command_buffer;
 
         unsafe {
-            self.device.device.cmd_bind_pipeline(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.pipeline,
-            );
-            self.device.device.cmd_bind_vertex_buffers(
-                command_buffer,
-                0,
-                std::slice::from_ref(&self.vertex_buffer.buffer),
-                &[0],
-            );
-            self.device.device.cmd_bind_index_buffer(
-                command_buffer,
-                self.index_buffer.buffer,
-                0,
-                vk::IndexType::UINT32,
-            );
-
-            let constants = PushConstants {
-                resolution: glam::Vec2::new(self.width as f32, self.height as f32),
-                time: self.time.elapsed().as_millis() as f32,
-            };
-            if self.time.elapsed().as_secs() > 10 {
-                self.time = Instant::now();
-            }
-
-            let test = std::slice::from_raw_parts(
-                &constants as *const PushConstants as *const u8,
-                size_of::<PushConstants>(),
-            );
-
-            self.device.device.cmd_push_constants(
-                command_buffer,
-                self.pipeline.layout,
-                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-                0,
-                &*test,
-            );
-
-            self.device.device.cmd_draw_indexed(
-                command_buffer,
-                self.index_count as u32,
-                1,
-                0,
-                0,
-                0,
-            );
-        }
-
-        unsafe {
             self.device.device.cmd_end_rendering(command_buffer);
         }
 
@@ -634,8 +588,7 @@ impl Drop for VulkanRenderer {
             }
 
             // Must drop in reverse order of creation
-            self.vertex_buffer.destroy(&self.allocator);
-            self.index_buffer.destroy(&self.allocator);
+            self.mesh_manager.destroy(&self.allocator);
 
             log::debug!("Dropping pipeline");
             self.pipeline.destroy(&self.device);
