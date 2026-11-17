@@ -47,7 +47,9 @@ impl ModelManager {
 
         let model = Self::load_model_data(path, mesh_manager, allocator, device)?;
 
+        let handle = ModelHandle(self.models.len() - 1);
         self.models.push(model);
+        self.loaded_models.insert(path.to_path_buf(), handle);
 
         Ok(ModelHandle(self.models.len() - 1))
     }
@@ -61,7 +63,7 @@ impl ModelManager {
         let mut mesh_handles: Vec<MeshHandle> = Vec::new();
         let (models, _materials) = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS)?;
 
-        for (_, m) in models.iter().enumerate() {
+        for (i, m) in models.iter().enumerate() {
             let mesh = &m.mesh;
 
             let mut vertices: Vec<Vertex> = Vec::new();
@@ -89,6 +91,8 @@ impl ModelManager {
                 indices.push(*index);
             }
 
+            log::debug!("MODLE _ MESH VERTEX - {}", vertices.len());
+            log::debug!("MODEL _MESH INDEX - {}", indices.len());
             mesh_handles.push(mesh_manager.load_mesh(allocator, device, &vertices, &indices)?);
         }
 

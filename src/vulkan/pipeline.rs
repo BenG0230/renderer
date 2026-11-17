@@ -19,7 +19,9 @@ impl Pipeline {
         // let mut shader_byte = include_bytes!(
         //     "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/shader.spv"
         // );
-        let mut shader_byte = std::fs::File::open("./examples/hello_tri/shader.spv")?;
+        let mut shader_byte = std::fs::File::open(
+            "/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/shader.spv",
+        )?;
         // let shader_source = ash::util::read_spv(&mut std::io::Cursor::new(shader_byte))?;
         let shader_source = ash::util::read_spv(&mut shader_byte)?;
 

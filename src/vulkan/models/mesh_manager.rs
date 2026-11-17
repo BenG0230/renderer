@@ -19,10 +19,10 @@ pub struct MeshManager {
     upload_fence: vk::Fence,
 
     vertex_buffer: Buffer,
-    vertex_offset: u32,
+    vertex_offset: u64,
 
     index_buffer: Buffer,
-    index_offset: u32,
+    index_offset: u64,
 
     staging_buffer: Buffer,
 }
@@ -61,6 +61,8 @@ impl MeshManager {
         vertices: &[Vertex],
         indices: &[u32],
     ) -> Result<MeshHandle, Box<dyn Error>> {
+        log::debug!("MESH VERTEX - {}", vertices.len());
+        log::debug!("MESH INDEX - {}", indices.len());
         let vertex_size = size_of::<Vertex>() * vertices.len();
         let index_size = size_of::<u32>() * indices.len();
 
@@ -69,12 +71,12 @@ impl MeshManager {
 
         let vertex_copy = vk::BufferCopy::default()
             .src_offset(0)
-            .dst_offset(self.vertex_offset as u64)
+            .dst_offset(self.vertex_offset)
             .size(vertex_size as u64);
 
         let index_copy = vk::BufferCopy::default()
             .src_offset(vertex_size as u64)
-            .dst_offset(self.index_offset as u64)
+            .dst_offset(self.index_offset)
             .size(index_size as u64);
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -120,10 +122,14 @@ impl MeshManager {
                 .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
         }
 
-        let mesh = Mesh::new(index_size, self.index_offset, self.vertex_offset as i32);
+        let mesh = Mesh::new(
+            indices.len(),
+            (self.index_offset / size_of::<u32>() as u64) as u32,
+            (self.vertex_offset / size_of::<Vertex>() as u64) as i32,
+        );
 
-        self.vertex_offset += vertex_size as u32;
-        self.index_offset += index_size as u32;
+        self.vertex_offset += vertex_size as u64;
+        self.index_offset += index_size as u64;
 
         self.meshes.push(mesh);
         Ok(MeshHandle(self.meshes.len() - 1))
@@ -147,6 +153,12 @@ impl MeshManager {
                 mapped.add(offset),
                 size_of::<T>() * data.len(),
             );
+
+            // allocator.allocator.flush_allocation(
+            //     &mut self.staging_buffer.allocation,
+            //     offset as u64,
+            //     (size_of::<T>() * data.len()) as u64,
+            // )?;
         };
 
         unsafe {

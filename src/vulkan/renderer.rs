@@ -94,6 +94,7 @@ impl VulkanRenderer {
             MeshManager::new(&allocator, &device, cmd_buffers[FRAMES_IN_FLIGHT as usize])?;
         let mut model_manager = ModelManager::new();
 
+        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Homermusume.obj"), &mut mesh_manager, &allocator, &device)?;
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
 
         let mut frames = Vec::new();
@@ -526,56 +527,6 @@ impl VulkanRenderer {
 
         Ok(())
     }
-
-    // unsafe {
-    //     self.device.device.cmd_bind_pipeline(
-    //         command_buffer,
-    //         vk::PipelineBindPoint::GRAPHICS,
-    //         self.pipeline.pipeline,
-    //     );
-    //     self.device.device.cmd_bind_vertex_buffers(
-    //         command_buffer,
-    //         0,
-    //         std::slice::from_ref(&self.vertex_buffer.buffer),
-    //         &[0],
-    //     );
-    //     self.device.device.cmd_bind_index_buffer(
-    //         command_buffer,
-    //         self.index_buffer.buffer,
-    //         0,
-    //         vk::IndexType::UINT32,
-    //     );
-    //
-    //     let constants = PushConstants {
-    //         resolution: glam::Vec2::new(self.width as f32, self.height as f32),
-    //         time: self.time.elapsed().as_millis() as f32,
-    //     };
-    //     if self.time.elapsed().as_secs() > 10 {
-    //         self.time = Instant::now();
-    //     }
-    //
-    //     let test = std::slice::from_raw_parts(
-    //         &constants as *const PushConstants as *const u8,
-    //         size_of::<PushConstants>(),
-    //     );
-    //
-    //     self.device.device.cmd_push_constants(
-    //         command_buffer,
-    //         self.pipeline.layout,
-    //         vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
-    //         0,
-    //         &*test,
-    //     );
-    //
-    //     self.device.device.cmd_draw_indexed(
-    //         command_buffer,
-    //         self.index_count as u32,
-    //         1,
-    //         0,
-    //         0,
-    //         0,
-    //     );
-    // }
 
     pub fn run(&self) {
         log::info!("Running Application!");
