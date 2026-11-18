@@ -41,9 +41,9 @@ impl ModelManager {
     ) -> Result<ModelHandle, Box<dyn Error>> {
         let path = &path.canonicalize()?;
 
-        if let Some(handle) = self.loaded_models.get(path) {
-            return Ok(*handle);
-        }
+        // if let Some(handle) = self.loaded_models.get(path) {
+        //     return Ok(*handle);
+        // }
 
         let model = Self::load_model_data(path, mesh_manager, allocator, device)?;
 

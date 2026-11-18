@@ -65,70 +65,6 @@ impl MeshManager {
         })
     }
 
-    fn resize_vertex_buffer(
-        &mut self,
-        allocator: &VulkanAllocator,
-        device: &Device,
-        old_size: u64,
-        new_size: u64,
-    ) -> Result<(), Box<dyn Error>> {
-        if new_size > BUFFER_MAX_SIZE {
-            return Err(format!(
-                "Vertex buffer to grow too big! {}mb",
-                new_size / (1024 * 1024)
-            )
-            .into());
-        }
-
-        let new_buffer = Buffer::vertex_buffer(allocator, new_size)?;
-
-        let copy = vk::BufferCopy::default()
-            .src_offset(0)
-            .dst_offset(0)
-            .size(old_size);
-
-        let begin_info = vk::CommandBufferBeginInfo::default();
-        unsafe {
-            device
-                .device
-                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
-
-            device
-                .device
-                .begin_command_buffer(self.command_buffer, &begin_info)?;
-
-            device.device.cmd_copy_buffer(
-                self.command_buffer,
-                self.vertex_buffer.buffer,
-                new_buffer.buffer,
-                &[copy],
-            );
-
-            device.device.end_command_buffer(self.command_buffer)?;
-
-            let submit_info = vk::SubmitInfo::default()
-                .command_buffers(std::slice::from_ref(&self.command_buffer));
-
-            device.device.reset_fences(&[self.upload_fence])?;
-
-            device
-                .device
-                .queue_submit(device.graphics_queue, &[submit_info], self.upload_fence)?;
-
-            device
-                .device
-                .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
-        }
-
-        self.vertex_buffer.destroy(allocator);
-
-        self.vertex_buffer = new_buffer;
-
-        log::debug!("Vertex buffer resized to {}MiB", new_size / (1024 * 1024));
-
-        Ok(())
-    }
-
     pub fn load_mesh(
         &mut self,
         allocator: &VulkanAllocator,
@@ -151,7 +87,15 @@ impl MeshManager {
             self.vertex_buffer_size = new_size;
         }
         if index_size as u64 + self.index_offset > self.index_buffer_size {
-            log::warn!("Too many indices!");
+            log::warn!("Too many indices! resizing index buffer");
+
+            let mut new_size = self.vertex_buffer_size;
+            while new_size < vertex_size as u64 + self.vertex_offset {
+                new_size *= 2;
+            }
+
+            self.resize_index_buffer(allocator, device, self.vertex_buffer_size, new_size)?;
+            self.index_buffer_size = new_size;
         }
 
         log::debug!(
@@ -366,6 +310,134 @@ impl MeshManager {
                 .allocator
                 .unmap_memory(&mut self.staging_buffer.allocation);
         }
+
+        Ok(())
+    }
+
+    fn resize_vertex_buffer(
+        &mut self,
+        allocator: &VulkanAllocator,
+        device: &Device,
+        old_size: u64,
+        new_size: u64,
+    ) -> Result<(), Box<dyn Error>> {
+        if new_size > BUFFER_MAX_SIZE {
+            return Err(format!(
+                "Vertex buffer to grow too big! {}mb",
+                new_size / (1024 * 1024)
+            )
+            .into());
+        }
+
+        let new_buffer = Buffer::vertex_buffer(allocator, new_size)?;
+
+        let copy = vk::BufferCopy::default()
+            .src_offset(0)
+            .dst_offset(0)
+            .size(old_size);
+
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe {
+            device
+                .device
+                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
+
+            device
+                .device
+                .begin_command_buffer(self.command_buffer, &begin_info)?;
+
+            device.device.cmd_copy_buffer(
+                self.command_buffer,
+                self.vertex_buffer.buffer,
+                new_buffer.buffer,
+                &[copy],
+            );
+
+            device.device.end_command_buffer(self.command_buffer)?;
+
+            let submit_info = vk::SubmitInfo::default()
+                .command_buffers(std::slice::from_ref(&self.command_buffer));
+
+            device.device.reset_fences(&[self.upload_fence])?;
+
+            device
+                .device
+                .queue_submit(device.graphics_queue, &[submit_info], self.upload_fence)?;
+
+            device
+                .device
+                .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
+        }
+
+        self.vertex_buffer.destroy(allocator);
+
+        self.vertex_buffer = new_buffer;
+
+        log::debug!("Vertex buffer resized to {}MiB", new_size / (1024 * 1024));
+
+        Ok(())
+    }
+
+    fn resize_index_buffer(
+        &mut self,
+        allocator: &VulkanAllocator,
+        device: &Device,
+        old_size: u64,
+        new_size: u64,
+    ) -> Result<(), Box<dyn Error>> {
+        if new_size > BUFFER_MAX_SIZE {
+            return Err(format!(
+                "Vertex buffer to grow too big! {}mb",
+                new_size / (1024 * 1024)
+            )
+            .into());
+        }
+
+        let new_buffer = Buffer::index_buffer(allocator, new_size)?;
+
+        let copy = vk::BufferCopy::default()
+            .src_offset(0)
+            .dst_offset(0)
+            .size(old_size);
+
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe {
+            device
+                .device
+                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
+
+            device
+                .device
+                .begin_command_buffer(self.command_buffer, &begin_info)?;
+
+            device.device.cmd_copy_buffer(
+                self.command_buffer,
+                self.index_buffer.buffer,
+                new_buffer.buffer,
+                &[copy],
+            );
+
+            device.device.end_command_buffer(self.command_buffer)?;
+
+            let submit_info = vk::SubmitInfo::default()
+                .command_buffers(std::slice::from_ref(&self.command_buffer));
+
+            device.device.reset_fences(&[self.upload_fence])?;
+
+            device
+                .device
+                .queue_submit(device.graphics_queue, &[submit_info], self.upload_fence)?;
+
+            device
+                .device
+                .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
+        }
+
+        self.index_buffer.destroy(allocator);
+
+        self.index_buffer = new_buffer;
+
+        log::debug!("Index buffer resized to {}MiB", new_size / (1024 * 1024));
 
         Ok(())
     }
