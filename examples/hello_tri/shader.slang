@@ -22,7 +22,7 @@ struct VSOutput
 PC pc;
 
 static const float3 light_dir = float3(0.0, 1.0, -0.3);
-static const float depth_far = 10000;
+static const float depth_far = 40;
 static const float depth_near = 0.01;
 
 [shader("vertex")]
@@ -47,8 +47,8 @@ VSOutput main(uint vertexID: SV_VertexID, VSInput input)
     float4 vertClip = float4(vertView.xy, depth, 1);
     vertClip.x *= pc.resolution.y / pc.resolution.x;
 
-    // output.pos = vertClip - float4(0.0, 1.0, 0.0, 0.0);
-    output.pos = vertClip;
+    output.pos = vertClip - float4(0.0, 1.0, 0.0, 0.0);
+    // output.pos = vertClip;
     output.normal = input.normal;
     output.uv = input.uv;
 

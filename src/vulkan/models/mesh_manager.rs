@@ -10,6 +10,11 @@ use crate::vulkan::{
     sync::create_fence,
 };
 
+const VERTEX_BUFFER_INITIAL_SIZE: u64 = 16 * 1024 * 1024;
+const INDEX_BUFFER_INITIAL_SIZE: u64 = 4 * 1024 * 1024;
+
+const STAGING_BUFFER_SIZE: u64 = 16 * 1024 * 1024;
+
 pub struct MeshHandle(usize);
 
 pub struct MeshManager {
@@ -33,10 +38,10 @@ impl MeshManager {
         device: &Device,
         command_buffer: vk::CommandBuffer,
     ) -> Result<Self, Box<dyn Error>> {
-        let vertex_buffer = Buffer::vertex_buffer(allocator, 32 * 1024 * 1024)?;
-        let index_buffer = Buffer::index_buffer(allocator, 32 * 1024 * 1024)?;
+        let vertex_buffer = Buffer::vertex_buffer(allocator, VERTEX_BUFFER_INITIAL_SIZE)?;
+        let index_buffer = Buffer::index_buffer(allocator, INDEX_BUFFER_INITIAL_SIZE)?;
 
-        let staging_buffer = Buffer::staging_buffer(allocator, 16 * 1024 * 1024)?;
+        let staging_buffer = Buffer::staging_buffer(allocator, STAGING_BUFFER_SIZE)?;
 
         Ok(Self {
             meshes: Vec::new(),
@@ -64,14 +69,124 @@ impl MeshManager {
         let vertex_size = size_of::<Vertex>() * vertices.len();
         let index_size = size_of::<u32>() * indices.len();
 
-        if vertex_size > 100 * 1024 * 1024 || index_size > 32 * 1024 * 1024 {
-            return Err(format!(
-                "Model too large! vertex {}MB index {}MB",
-                vertex_size / (1024 * 1024),
-                index_size / (1024 * 1024)
-            )
-            .into());
+        if vertex_size + index_size < STAGING_BUFFER_SIZE as usize {
+            log::debug!("no chunks for you!");
+            self.load_mesh_all(allocator, device, vertices, indices)
+        } else {
+            log::debug!("mmmm chunky");
+            self.load_mesh_chunks(allocator, device, vertices, indices)
+        }?;
+
+        let mesh = Mesh::new(
+            indices.len(),
+            (self.index_offset / size_of::<u32>() as u64) as u32,
+            (self.vertex_offset / size_of::<Vertex>() as u64) as i32,
+        );
+
+        self.vertex_offset += vertex_size as u64;
+        self.index_offset += index_size as u64;
+
+        self.meshes.push(mesh);
+        Ok(MeshHandle(self.meshes.len() - 1))
+    }
+
+    pub fn load_mesh_chunks(
+        &mut self,
+        allocator: &VulkanAllocator,
+        device: &Device,
+        vertices: &[Vertex],
+        indices: &[u32],
+    ) -> Result<(), Box<dyn Error>> {
+        let vertex_bytes = as_bytes(vertices);
+        let index_bytes = as_bytes(indices);
+
+        for (i, chunk) in vertex_bytes
+            .chunks(STAGING_BUFFER_SIZE as usize)
+            .enumerate()
+        {
+            self.copy_chunk(
+                allocator,
+                device,
+                self.vertex_buffer.buffer,
+                self.vertex_offset + (i as u64 * STAGING_BUFFER_SIZE),
+                chunk,
+            )?;
         }
+
+        for (i, chunk) in index_bytes.chunks(STAGING_BUFFER_SIZE as usize).enumerate() {
+            self.copy_chunk(
+                allocator,
+                device,
+                self.index_buffer.buffer,
+                self.index_offset + (i as u64 * STAGING_BUFFER_SIZE),
+                chunk,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn copy_chunk<T>(
+        &mut self,
+        allocator: &VulkanAllocator,
+        device: &Device,
+        dst_buffer: vk::Buffer,
+        offset: u64,
+        chunk: &[T],
+    ) -> Result<(), Box<dyn Error>> {
+        self.copy_to_staging(allocator, chunk, 0)?;
+
+        let copy = vk::BufferCopy::default()
+            .src_offset(0)
+            .dst_offset(offset)
+            .size(STAGING_BUFFER_SIZE.min(chunk.len() as u64));
+
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe {
+            device
+                .device
+                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
+
+            device
+                .device
+                .begin_command_buffer(self.command_buffer, &begin_info)?;
+
+            device.device.cmd_copy_buffer(
+                self.command_buffer,
+                self.staging_buffer.buffer,
+                dst_buffer,
+                &[copy],
+            );
+
+            device.device.end_command_buffer(self.command_buffer)?;
+
+            let command_buffer_submit_info = vk::SubmitInfo::default()
+                .command_buffers(std::slice::from_ref(&self.command_buffer));
+
+            device.device.reset_fences(&[self.upload_fence])?;
+
+            device.device.queue_submit(
+                device.graphics_queue,
+                &[command_buffer_submit_info],
+                self.upload_fence,
+            )?;
+
+            device
+                .device
+                .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
+        };
+
+        Ok(())
+    }
+
+    pub fn load_mesh_all(
+        &mut self,
+        allocator: &VulkanAllocator,
+        device: &Device,
+        vertices: &[Vertex],
+        indices: &[u32],
+    ) -> Result<(), Box<dyn Error>> {
+        let vertex_size = size_of::<Vertex>() * vertices.len();
+        let index_size = size_of::<u32>() * indices.len();
 
         self.copy_to_staging(allocator, vertices, 0)?;
         self.copy_to_staging(allocator, indices, vertex_size)?;
@@ -128,18 +243,7 @@ impl MeshManager {
                 .device
                 .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
         }
-
-        let mesh = Mesh::new(
-            indices.len(),
-            (self.index_offset / size_of::<u32>() as u64) as u32,
-            (self.vertex_offset / size_of::<Vertex>() as u64) as i32,
-        );
-
-        self.vertex_offset += vertex_size as u64;
-        self.index_offset += index_size as u64;
-
-        self.meshes.push(mesh);
-        Ok(MeshHandle(self.meshes.len() - 1))
+        Ok(())
     }
 
     fn copy_to_staging<T>(
@@ -196,4 +300,8 @@ impl MeshManager {
 
         unsafe { device.device.destroy_fence(self.upload_fence, None) };
     }
+}
+
+fn as_bytes<T>(slice: &[T]) -> &[u8] {
+    unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, size_of::<T>() * slice.len()) }
 }
