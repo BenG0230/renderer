@@ -10,8 +10,10 @@ use crate::vulkan::{
     sync::create_fence,
 };
 
-const VERTEX_BUFFER_INITIAL_SIZE: u64 = 16 * 1024 * 1024;
-const INDEX_BUFFER_INITIAL_SIZE: u64 = 4 * 1024 * 1024;
+const VERTEX_BUFFER_INITIAL_SIZE: u64 = 32 * 1024 * 1024;
+const INDEX_BUFFER_INITIAL_SIZE: u64 = 16 * 1024 * 1024;
+
+const BUFFER_MAX_SIZE: u64 = 256 * 1024 * 1024;
 
 const STAGING_BUFFER_SIZE: u64 = 16 * 1024 * 1024;
 
@@ -24,9 +26,11 @@ pub struct MeshManager {
     upload_fence: vk::Fence,
 
     vertex_buffer: Buffer,
+    vertex_buffer_size: u64,
     vertex_offset: u64,
 
     index_buffer: Buffer,
+    index_buffer_size: u64,
     index_offset: u64,
 
     staging_buffer: Buffer,
@@ -50,13 +54,79 @@ impl MeshManager {
             upload_fence: create_fence(device)?,
 
             vertex_buffer,
+            vertex_buffer_size: VERTEX_BUFFER_INITIAL_SIZE,
             vertex_offset: 0,
 
             index_buffer,
+            index_buffer_size: INDEX_BUFFER_INITIAL_SIZE,
             index_offset: 0,
 
             staging_buffer,
         })
+    }
+
+    fn resize_vertex_buffer(
+        &mut self,
+        allocator: &VulkanAllocator,
+        device: &Device,
+        old_size: u64,
+        new_size: u64,
+    ) -> Result<(), Box<dyn Error>> {
+        if new_size > BUFFER_MAX_SIZE {
+            return Err(format!(
+                "Vertex buffer to grow too big! {}mb",
+                new_size / (1024 * 1024)
+            )
+            .into());
+        }
+
+        let new_buffer = Buffer::vertex_buffer(allocator, new_size)?;
+
+        let copy = vk::BufferCopy::default()
+            .src_offset(0)
+            .dst_offset(0)
+            .size(old_size);
+
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe {
+            device
+                .device
+                .reset_command_buffer(self.command_buffer, vk::CommandBufferResetFlags::empty())?;
+
+            device
+                .device
+                .begin_command_buffer(self.command_buffer, &begin_info)?;
+
+            device.device.cmd_copy_buffer(
+                self.command_buffer,
+                self.vertex_buffer.buffer,
+                new_buffer.buffer,
+                &[copy],
+            );
+
+            device.device.end_command_buffer(self.command_buffer)?;
+
+            let submit_info = vk::SubmitInfo::default()
+                .command_buffers(std::slice::from_ref(&self.command_buffer));
+
+            device.device.reset_fences(&[self.upload_fence])?;
+
+            device
+                .device
+                .queue_submit(device.graphics_queue, &[submit_info], self.upload_fence)?;
+
+            device
+                .device
+                .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
+        }
+
+        self.vertex_buffer.destroy(allocator);
+
+        self.vertex_buffer = new_buffer;
+
+        log::debug!("Vertex buffer resized to {}MiB", new_size / (1024 * 1024));
+
+        Ok(())
     }
 
     pub fn load_mesh(
@@ -69,11 +139,30 @@ impl MeshManager {
         let vertex_size = size_of::<Vertex>() * vertices.len();
         let index_size = size_of::<u32>() * indices.len();
 
+        if vertex_size as u64 + self.vertex_offset > self.vertex_buffer_size {
+            log::warn!("Too many vertices! resizing vertex buffer");
+
+            let mut new_size = self.vertex_buffer_size;
+            while new_size < vertex_size as u64 + self.vertex_offset {
+                new_size *= 2;
+            }
+
+            self.resize_vertex_buffer(allocator, device, self.vertex_buffer_size, new_size)?;
+            self.vertex_buffer_size = new_size;
+        }
+        if index_size as u64 + self.index_offset > self.index_buffer_size {
+            log::warn!("Too many indices!");
+        }
+
+        log::debug!(
+            "Model size: vertex - {:.2}MiB index - {:.2}MiB",
+            vertex_size as f64 / (1024.0 * 1024.0),
+            index_size as f64 / (1024.0 * 1024.0)
+        );
+
         if vertex_size + index_size < STAGING_BUFFER_SIZE as usize {
-            log::debug!("no chunks for you!");
             self.load_mesh_all(allocator, device, vertices, indices)
         } else {
-            log::debug!("mmmm chunky");
             self.load_mesh_chunks(allocator, device, vertices, indices)
         }?;
 
@@ -90,7 +179,7 @@ impl MeshManager {
         Ok(MeshHandle(self.meshes.len() - 1))
     }
 
-    pub fn load_mesh_chunks(
+    fn load_mesh_chunks(
         &mut self,
         allocator: &VulkanAllocator,
         device: &Device,
@@ -125,7 +214,7 @@ impl MeshManager {
         Ok(())
     }
 
-    pub fn copy_chunk<T>(
+    fn copy_chunk<T>(
         &mut self,
         allocator: &VulkanAllocator,
         device: &Device,
@@ -178,7 +267,7 @@ impl MeshManager {
         Ok(())
     }
 
-    pub fn load_mesh_all(
+    fn load_mesh_all(
         &mut self,
         allocator: &VulkanAllocator,
         device: &Device,

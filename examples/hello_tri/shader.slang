@@ -22,7 +22,7 @@ struct VSOutput
 PC pc;
 
 static const float3 light_dir = float3(0.0, 1.0, -0.3);
-static const float depth_far = 40;
+static const float depth_far = 100;
 static const float depth_near = 0.01;
 
 [shader("vertex")]
