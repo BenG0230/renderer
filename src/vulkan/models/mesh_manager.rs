@@ -10,10 +10,10 @@ use crate::vulkan::{
     sync::create_fence,
 };
 
-const VERTEX_BUFFER_INITIAL_SIZE: u64 = 32 * 1024 * 1024;
+const VERTEX_BUFFER_INITIAL_SIZE: u64 = 128 * 1024 * 1024;
 const INDEX_BUFFER_INITIAL_SIZE: u64 = 16 * 1024 * 1024;
 
-const BUFFER_MAX_SIZE: u64 = 256 * 1024 * 1024;
+const BUFFER_MAX_SIZE: u64 = 512 * 1024 * 1024;
 
 const STAGING_BUFFER_SIZE: u64 = 16 * 1024 * 1024;
 

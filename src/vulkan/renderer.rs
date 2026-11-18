@@ -96,12 +96,14 @@ impl VulkanRenderer {
             MeshManager::new(&allocator, &device, cmd_buffers[FRAMES_IN_FLIGHT as usize])?;
         let mut model_manager = ModelManager::new();
 
+        let t = Instant::now();
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Dragon.obj"), &mut mesh_manager, &allocator, &device)?;
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Bunny.obj"), &mut mesh_manager, &allocator, &device)?;
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/teapot.obj"), &mut mesh_manager, &allocator, &device)?;
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Homermusume.obj"), &mut mesh_manager, &allocator, &device)?;
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Suzanne.obj"), &mut mesh_manager, &allocator, &device)?;
+        log::debug!("Time taken: {}s", t.elapsed().as_millis() as f64 / 1000.0);
 
         let mut frames = Vec::new();
         for i in 0..FRAMES_IN_FLIGHT {
