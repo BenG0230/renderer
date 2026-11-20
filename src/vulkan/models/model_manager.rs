@@ -41,17 +41,17 @@ impl ModelManager {
     ) -> Result<ModelHandle, Box<dyn Error>> {
         let path = &path.canonicalize()?;
 
-        // if let Some(handle) = self.loaded_models.get(path) {
-        //     return Ok(*handle);
-        // }
+        if let Some(handle) = self.loaded_models.get(path) {
+            return Ok(*handle);
+        }
 
         let model = Self::load_model_data(path, mesh_manager, allocator, device)?;
 
+        let handle = ModelHandle(self.models.len());
         self.models.push(model);
-        let handle = ModelHandle(self.models.len() - 1);
         self.loaded_models.insert(path.to_path_buf(), handle);
 
-        Ok(ModelHandle(self.models.len() - 1))
+        Ok(handle)
     }
 
     fn load_model_data(

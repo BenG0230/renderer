@@ -75,7 +75,7 @@ impl Buffer {
             .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
         let alloc_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::Auto,
+            usage: vk_mem::MemoryUsage::AutoPreferHost,
             flags: vk_mem::AllocationCreateFlags::HOST_ACCESS_SEQUENTIAL_WRITE,
             ..Default::default()
         };
@@ -108,11 +108,29 @@ impl Image {
     pub fn create_image(
         allocator: &VulkanAllocator,
         device: &Device,
-        image_info: &vk::ImageCreateInfo,
+        format: vk::Format,
+        width: u32,
+        height: u32,
     ) -> Result<Self, Box<dyn Error>> {
         log::debug!("allocating image");
+        let image_info = &vk::ImageCreateInfo::default()
+            .image_type(vk::ImageType::TYPE_2D)
+            .format(format)
+            .extent(vk::Extent3D {
+                width,
+                height,
+                depth: 1,
+            })
+            .mip_levels(1)
+            .array_layers(1)
+            .samples(vk::SampleCountFlags::TYPE_1)
+            .tiling(vk::ImageTiling::OPTIMAL)
+            .usage(vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .initial_layout(vk::ImageLayout::UNDEFINED);
+
         let alloc_info = vk_mem::AllocationCreateInfo {
-            usage: vk_mem::MemoryUsage::Auto,
+            usage: vk_mem::MemoryUsage::AutoPreferDevice,
             ..Default::default()
         };
 

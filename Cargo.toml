@@ -12,6 +12,7 @@ thiserror = "2.0.21"
 vk-mem = "0.5.0"
 tobj = "4.0.5"
 glam = "0.34.3"
+image = "0.25.10"
 
 [dev-dependencies]
 env_logger = "0.11.11"

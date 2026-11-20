@@ -11,3 +11,4 @@ pub(self) mod swapchain;
 pub(self) mod sync;
 
 pub(self) mod models;
+pub(self) mod textures;

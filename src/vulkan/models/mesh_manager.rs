@@ -99,7 +99,7 @@ impl MeshManager {
         }
 
         log::debug!(
-            "Model size: vertex - {:.2}MiB index - {:.2}MiB",
+            "Mesh size: vertex - {:.2}MiB index - {:.2}MiB",
             vertex_size as f64 / (1024.0 * 1024.0),
             index_size as f64 / (1024.0 * 1024.0)
         );
@@ -196,13 +196,11 @@ impl MeshManager {
                 .command_buffers(std::slice::from_ref(&self.command_buffer));
 
             device.device.reset_fences(&[self.upload_fence])?;
-
             device.device.queue_submit(
                 device.graphics_queue,
                 &[command_buffer_submit_info],
                 self.upload_fence,
             )?;
-
             device
                 .device
                 .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
@@ -285,31 +283,21 @@ impl MeshManager {
         data: &[T],
         offset: usize,
     ) -> Result<(), Box<dyn Error>> {
-        let mapped = unsafe {
-            allocator
-                .allocator
-                .map_memory(&mut self.staging_buffer.allocation)
-        }?;
-
         unsafe {
+            let mapped = allocator
+                .allocator
+                .map_memory(&mut self.staging_buffer.allocation)?;
+
             std::ptr::copy_nonoverlapping(
                 data.as_ptr() as *const u8,
                 mapped.add(offset),
                 size_of::<T>() * data.len(),
             );
 
-            allocator.allocator.flush_allocation(
-                &mut self.staging_buffer.allocation,
-                offset as u64,
-                (size_of::<T>() * data.len()) as u64,
-            )?;
-        };
-
-        unsafe {
             allocator
                 .allocator
                 .unmap_memory(&mut self.staging_buffer.allocation);
-        }
+        };
 
         Ok(())
     }

@@ -14,6 +14,7 @@ use crate::vulkan::models::model_manager::ModelManager;
 use crate::vulkan::pipeline::Pipeline;
 use crate::vulkan::surface::Surface;
 use crate::vulkan::swapchain::Swapchain;
+use crate::vulkan::textures::texture_manager::TextureManager;
 use crate::vulkan::{debug::DebugMessenger, device::Device};
 
 const FRAMES_IN_FLIGHT: u32 = 2;
@@ -42,6 +43,7 @@ pub(crate) struct VulkanRenderer {
 
     mesh_manager: MeshManager,
     model_manager: ModelManager,
+    texture_manager: TextureManager,
 
     pub resize_requested: bool,
     pub resize_request_time: Instant,
@@ -90,20 +92,34 @@ impl VulkanRenderer {
         )?;
 
         let command_pool = Command::new(&device)?;
-        let cmd_buffers = command_pool.allocate_buffer(&device, FRAMES_IN_FLIGHT + 1)?;
+        let cmd_buffers = command_pool.allocate_buffer(&device, FRAMES_IN_FLIGHT + 2)?;
 
         let mut mesh_manager =
             MeshManager::new(&allocator, &device, cmd_buffers[FRAMES_IN_FLIGHT as usize])?;
         let mut model_manager = ModelManager::new();
+        let mut texture_manager = TextureManager::new(
+            &allocator,
+            &device,
+            cmd_buffers[FRAMES_IN_FLIGHT as usize + 1],
+        )?;
 
-        let t = Instant::now();
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Dragon.obj"), &mut mesh_manager, &allocator, &device)?;
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Bunny.obj"), &mut mesh_manager, &allocator, &device)?;
-        // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/teapot.obj"), &mut mesh_manager, &allocator, &device)?;
+        model_manager.load_model(
+            Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/teapot.obj"),
+            &mut mesh_manager,
+            &allocator,
+            &device,
+        )?;
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Homermusume.obj"), &mut mesh_manager, &allocator, &device)?;
-        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
+        // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Suzanne.obj"), &mut mesh_manager, &allocator, &device)?;
-        log::debug!("Time taken: {}s", t.elapsed().as_millis() as f64 / 1000.0);
+
+        texture_manager.load_texture(
+            Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/teapotTest.png"),
+            &allocator,
+            &device,
+        )?;
 
         let mut frames = Vec::new();
         for i in 0..FRAMES_IN_FLIGHT {
@@ -131,6 +147,7 @@ impl VulkanRenderer {
             allocator,
             mesh_manager,
             model_manager,
+            texture_manager,
             resize_requested: false,
             resize_request_time: Instant::now(),
             width,
@@ -553,6 +570,7 @@ impl Drop for VulkanRenderer {
 
             // Must drop in reverse order of creation
             self.mesh_manager.destroy(&self.device, &self.allocator);
+            self.texture_manager.destroy(&self.device, &self.allocator);
 
             log::debug!("Dropping pipeline");
             self.pipeline.destroy(&self.device);
