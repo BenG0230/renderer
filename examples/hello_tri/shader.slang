@@ -21,7 +21,7 @@ struct VSOutput
 [[vk::push_constant]]
 PC pc;
 
-static const float3 light_dir = float3(0.0, 1.0, -0.3);
+static const float3 light_dir = float3(1.0, 0.0, 0.3);
 static const float depth_far = 100;
 static const float depth_near = 0.01;
 
@@ -49,7 +49,11 @@ VSOutput main(uint vertexID: SV_VertexID, VSInput input)
 
     output.pos = vertClip - float4(0.0, 1.0, 0.0, 0.0);
     // output.pos = vertClip;
-    output.normal = input.normal;
+    output.normal = 0;
+    output.normal += iHat * input.normal.x;
+    output.normal += jHat * input.normal.y;
+    output.normal += kHat * input.normal.z;
+
     output.uv = input.uv;
 
     return output;
@@ -65,7 +69,7 @@ float4 main(VSOutput input)
     float3 normal = normalize(input.normal);
     // float3 col = normal * 0.5 + 0.5;
 
-    float3 col = float3(dot(normal, light_dir) * 0.5 + 0.5);
+    float3 col = float3(max(0.05, dot(input.normal, light_dir)));
     // col = float3(input.normal, 0.0);
     col = pow(col, 2.2);
     return float4(col, 1.0);
