@@ -115,9 +115,7 @@ impl TextureManager {
                 vk::ImageSubresourceRange::default()
                     .aspect_mask(vk::ImageAspectFlags::COLOR)
                     .level_count(1)
-                    .layer_count(1)
-                    .base_array_layer(0)
-                    .base_mip_level(1),
+                    .layer_count(1),
             );
 
         let depedency_info =
@@ -166,9 +164,7 @@ impl TextureManager {
                 vk::ImageSubresourceRange::default()
                     .aspect_mask(vk::ImageAspectFlags::COLOR)
                     .level_count(1)
-                    .layer_count(1)
-                    .base_array_layer(0)
-                    .base_mip_level(1),
+                    .layer_count(1),
             );
 
         let depedency_info =

@@ -80,7 +80,7 @@ impl MeshManager {
 
             let mut new_size = self.vertex_buffer_size;
             while new_size < vertex_size as u64 + self.vertex_offset {
-                new_size *= 2;
+                new_size += VERTEX_BUFFER_INITIAL_SIZE;
             }
 
             self.resize_vertex_buffer(allocator, device, self.vertex_buffer_size, new_size)?;
@@ -91,7 +91,7 @@ impl MeshManager {
 
             let mut new_size = self.vertex_buffer_size;
             while new_size < vertex_size as u64 + self.vertex_offset {
-                new_size *= 2;
+                new_size += VERTEX_BUFFER_INITIAL_SIZE;
             }
 
             self.resize_index_buffer(allocator, device, self.vertex_buffer_size, new_size)?;

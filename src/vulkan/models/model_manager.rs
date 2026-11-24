@@ -63,9 +63,6 @@ impl ModelManager {
         let mut mesh_handles: Vec<MeshHandle> = Vec::new();
         let (models, _materials) = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS)?;
 
-        log::debug!("Loading new model");
-
-        let t = std::time::Instant::now();
         for (_, m) in models.iter().enumerate() {
             let mesh = &m.mesh;
 
@@ -107,7 +104,6 @@ impl ModelManager {
 
             mesh_handles.push(mesh_manager.load_mesh(allocator, device, &vertices, &indices)?);
         }
-        log::debug!("Time taken: {}ms", t.elapsed().as_millis() as f64);
 
         let model = Model::new(mesh_handles);
 

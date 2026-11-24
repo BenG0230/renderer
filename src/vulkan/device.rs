@@ -204,19 +204,23 @@ impl Device {
             .map(|e| e.as_ptr())
             .collect::<Vec<_>>();
 
-        let device_features = vk::PhysicalDeviceFeatures::default();
+        let device_features = vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
 
         let mut dynamic_feature =
             vk::PhysicalDeviceDynamicRenderingFeatures::default().dynamic_rendering(true);
         let mut sync_2_feature =
             vk::PhysicalDeviceSynchronization2Features::default().synchronization2(true);
+        let mut descriptor_binding_feature =
+            vk::PhysicalDeviceDescriptorIndexingFeatures::default()
+                .descriptor_binding_variable_descriptor_count(true);
 
         let device_create_info = vk::DeviceCreateInfo::default()
             .queue_create_infos(&queue_create_info)
             .enabled_extension_names(&device_extensions_ptrs)
             .enabled_features(&device_features)
             .push_next(&mut dynamic_feature)
-            .push_next(&mut sync_2_feature);
+            .push_next(&mut sync_2_feature)
+            .push_next(&mut descriptor_binding_feature);
 
         let device = unsafe { instance.create_device(device, &device_create_info, None)? };
         let graphics_queue = unsafe { device.get_device_queue(graphics_family_index, 0) };

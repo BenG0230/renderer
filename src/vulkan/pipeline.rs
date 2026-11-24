@@ -37,8 +37,27 @@ impl Pipeline {
             .offset(0)
             .size(size_of::<PushConstants>() as u32);
 
+        let desc_variable_flags = vk::DescriptorBindingFlags::VARIABLE_DESCRIPTOR_COUNT;
+        let mut desc_binding_flags = vk::DescriptorSetLayoutBindingFlagsCreateInfo::default()
+            .binding_flags(std::slice::from_ref(&desc_variable_flags));
+
+        let desc_layout_binding_tex = vk::DescriptorSetLayoutBinding::default()
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+        let desc_layout_tex_ci = vk::DescriptorSetLayoutCreateInfo::default()
+            .push_next(&mut desc_binding_flags)
+            .bindings(std::slice::from_ref(&desc_layout_binding_tex));
+
+        let desc_set_layout_tex = unsafe {
+            device
+                .device
+                .create_descriptor_set_layout(&desc_layout_tex_ci, None)?
+        };
+
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
-            .push_constant_ranges(std::slice::from_ref(&push_constant_range));
+            .push_constant_ranges(std::slice::from_ref(&push_constant_range))
+            .set_layouts(std::slice::from_ref(&desc_set_layout_tex));
 
         let layout = unsafe {
             device
