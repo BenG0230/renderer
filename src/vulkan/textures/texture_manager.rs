@@ -9,6 +9,7 @@ use image::ImageReader;
 
 use crate::vulkan::{
     allocation::{Buffer, Image, VulkanAllocator},
+    descriptor::Descriptor,
     device::Device,
     sync::create_fence,
     textures::texture::Texture,
@@ -20,8 +21,9 @@ const STAGING_BUFFER_SIZE: u64 = 64 * 1024 * 1024;
 pub struct TextureHandle(usize);
 
 pub struct TextureManager {
-    textures: Vec<Texture>,
+    pub textures: Vec<Texture>,
     loaded_textures: HashMap<PathBuf, TextureHandle>,
+    sampler: vk::Sampler,
 
     command_buffer: vk::CommandBuffer,
     upload_fence: vk::Fence,
@@ -39,9 +41,19 @@ impl TextureManager {
 
         let upload_fence = create_fence(device)?;
 
+        let create_info = &vk::SamplerCreateInfo::default()
+            .mag_filter(vk::Filter::NEAREST)
+            .mipmap_mode(vk::SamplerMipmapMode::NEAREST)
+            .anisotropy_enable(true)
+            .max_anisotropy(8.0)
+            .max_lod(0.0);
+
+        let sampler = unsafe { device.device.create_sampler(create_info, None)? };
+
         Ok(Self {
             textures: Vec::new(),
             loaded_textures: HashMap::new(),
+            sampler,
 
             command_buffer,
             upload_fence,
@@ -55,6 +67,7 @@ impl TextureManager {
         path: &Path,
         allocator: &VulkanAllocator,
         device: &Device,
+        descriptor: &Descriptor,
     ) -> Result<TextureHandle, Box<dyn Error>> {
         let path = &path.canonicalize()?;
 
@@ -62,7 +75,9 @@ impl TextureManager {
             return Ok(*handle);
         }
 
-        let image = ImageReader::open(path)?.decode()?.to_rgba8();
+        let mut image = ImageReader::open(path)?.decode()?.to_rgba8();
+
+        image::imageops::flip_vertical_in_place(&mut image);
 
         let (width, height) = image.dimensions();
         let data = image.into_raw();
@@ -72,7 +87,8 @@ impl TextureManager {
             data.len() as f64 / (1024.0 * 1024.0)
         );
 
-        let texture = self.load_texture_data(&data, width, height, allocator, device)?;
+        let texture =
+            self.load_texture_data(&data, width, height, allocator, device, descriptor)?;
 
         let handle = TextureHandle(self.textures.len());
         self.textures.push(texture);
@@ -88,10 +104,12 @@ impl TextureManager {
         height: u32,
         allocator: &VulkanAllocator,
         device: &Device,
+        descriptor: &Descriptor,
     ) -> Result<Texture, Box<dyn Error>> {
         self.copy_to_staging(allocator, data)?;
 
-        let image = Image::create_image(allocator, device, vk::Format::R8G8B8_SRGB, width, height)?;
+        let image =
+            Image::create_image(allocator, device, vk::Format::R8G8B8A8_SRGB, width, height)?;
 
         let begin_info = vk::CommandBufferBeginInfo::default();
         unsafe {
@@ -191,7 +209,7 @@ impl TextureManager {
                 .wait_for_fences(&[self.upload_fence], true, u64::MAX)?;
         };
 
-        Ok(Texture::new(image, device)?)
+        Ok(Texture::new(image, device, descriptor, self.sampler)?)
     }
 
     fn copy_to_staging(
@@ -221,6 +239,9 @@ impl TextureManager {
 
         self.staging_buffer.destroy(allocator);
 
-        unsafe { device.device.destroy_fence(self.upload_fence, None) };
+        unsafe {
+            device.device.destroy_sampler(self.sampler, None);
+            device.device.destroy_fence(self.upload_fence, None)
+        };
     }
 }

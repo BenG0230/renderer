@@ -8,6 +8,7 @@ use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle};
 
 use crate::vulkan::allocation::{Buffer, VulkanAllocator};
 use crate::vulkan::commands::Command;
+use crate::vulkan::descriptor::Descriptor;
 use crate::vulkan::frame::Frame;
 use crate::vulkan::models::mesh_manager::MeshManager;
 use crate::vulkan::models::model_manager::ModelManager;
@@ -30,6 +31,7 @@ pub(crate) struct VulkanRenderer {
     surface: Surface,
 
     command_pool: Command,
+    descriptor_pool: Descriptor,
 
     pipeline: Pipeline,
 
@@ -94,6 +96,8 @@ impl VulkanRenderer {
         let command_pool = Command::new(&device)?;
         let cmd_buffers = command_pool.allocate_buffer(&device, FRAMES_IN_FLIGHT + 2)?;
 
+        let descriptor_pool = Descriptor::new(&device)?;
+
         let mut mesh_manager =
             MeshManager::new(&allocator, &device, cmd_buffers[FRAMES_IN_FLIGHT as usize])?;
         let mut model_manager = ModelManager::new();
@@ -105,20 +109,21 @@ impl VulkanRenderer {
 
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Dragon.obj"), &mut mesh_manager, &allocator, &device)?;
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Bunny.obj"), &mut mesh_manager, &allocator, &device)?;
-        model_manager.load_model(
-            Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/teapot.obj"),
-            &mut mesh_manager,
-            &allocator,
-            &device,
-        )?;
-        // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Homermusume.obj"), &mut mesh_manager, &allocator, &device)?;
-        // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
+        // model_manager.load_model(
+        //     Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/teapot.obj"),
+        //     &mut mesh_manager,
+        //     &allocator,
+        //     &device,
+        // )?;
+        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Homermusume.obj"), &mut mesh_manager, &allocator, &device)?;
+        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Suzanne.obj"), &mut mesh_manager, &allocator, &device)?;
 
         texture_manager.load_texture(
-            Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/teapotTest.png"),
+            Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/uv.png"),
             &allocator,
             &device,
+            &descriptor_pool
         )?;
 
         let mut frames = Vec::new();
@@ -129,7 +134,7 @@ impl VulkanRenderer {
 
         let image_fences = vec![vk::Fence::null(); swapchain.images.len()];
 
-        let pipeline = Pipeline::new(&swapchain, &device)?;
+        let pipeline = Pipeline::new(&swapchain, &device, &descriptor_pool)?;
 
         Ok(Self {
             _entry: entry,
@@ -139,6 +144,7 @@ impl VulkanRenderer {
             surface,
             debug_messenger,
             command_pool,
+            descriptor_pool,
             frames,
             image_fences,
             current_frame: 0,
@@ -426,6 +432,15 @@ impl VulkanRenderer {
                 vk::IndexType::UINT32,
             );
 
+            self.device.device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline.layout,
+                0,
+                &[self.texture_manager.textures[0].descriptor_set],
+                &[],
+            );
+
             let constants = PushConstants {
                 resolution: glam::Vec2::new(self.width as f32, self.height as f32),
                 time: self.time.elapsed().as_millis() as f32,
@@ -582,6 +597,9 @@ impl Drop for VulkanRenderer {
 
             log::debug!("Dropping command pool");
             self.command_pool.destroy(&self.device);
+
+            log::debug!("Dropping Descriptor pool");
+            self.descriptor_pool.destroy(&self.device);
 
             self.swapchain.destroy(&self.allocator, &self.device);
 
