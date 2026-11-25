@@ -61,9 +61,16 @@ impl ModelManager {
         device: &Device,
     ) -> Result<Model, Box<dyn Error>> {
         let mut mesh_handles: Vec<MeshHandle> = Vec::new();
-        let (models, _materials) = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS)?;
+        let (models, materials) = tobj::load_obj(path, &tobj::GPU_LOAD_OPTIONS)?;
 
-        for (_, m) in models.iter().enumerate() {
+        if let Ok(materials) = materials {
+            for (_, m) in materials.iter().enumerate() {
+                // Load materials returning a vec of handles for the meshes to index into
+                log::debug!("{:#?}", m);
+            }
+        }
+
+        for m in models {
             let mesh = &m.mesh;
 
             let mut vertices: Vec<Vertex> = Vec::new();

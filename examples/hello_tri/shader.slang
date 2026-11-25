@@ -24,7 +24,7 @@ PC pc;
 [[vk::binding(0, 0)]]
 Sampler2D albedoTexture;
 
-static const float3 light_dir = float3(1.0, 0.0, 0.3);
+static const float3 light_dir = float3(-0.7, -1.0, 0.0);
 static const float depth_far = 100;
 static const float depth_near = 0.01;
 
@@ -69,10 +69,8 @@ float4 main(VSOutput input)
 
     float2 screenUV = pixelCoord / pc.resolution;
 
-    // float3 normal = normalize(input.normal);
-    // float3 col = normal * 0.5 + 0.5;
-
-    // float4 col = float4(input.uv, 0.0, 0.0);
-    float4 col = albedoTexture.Sample(input.uv);
+    float3 normal = normalize(input.normal);
+    float3 light = normalize(light_dir);
+    float4 col = albedoTexture.Sample(input.uv) * (floor(max(0.05, dot(normal, light)) * 5) / 5);
     return col;
 }

@@ -116,15 +116,18 @@ impl VulkanRenderer {
         //     &device,
         // )?;
         model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Homermusume.obj"), &mut mesh_manager, &allocator, &device)?;
-        model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
+        // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Margeship.obj"), &mut mesh_manager, &allocator, &device)?;
         // model_manager.load_model(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/models/Suzanne.obj"), &mut mesh_manager, &allocator, &device)?;
 
+        texture_manager.load_texture(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/homer/tail.png"), &allocator, &device, &descriptor_pool)?;
+        texture_manager.load_texture(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/homer/hair.png"), &allocator, &device, &descriptor_pool)?;
         texture_manager.load_texture(
-            Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/uv.png"),
+            Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/homer/body.png"),
             &allocator,
             &device,
             &descriptor_pool
         )?;
+        texture_manager.load_texture(Path::new("/home/jam/Documents/Programming/Rust/renderer/renderer/examples/hello_tri/textures/homer/head.png"), &allocator, &device, &descriptor_pool)?;
 
         let mut frames = Vec::new();
         for i in 0..FRAMES_IN_FLIGHT {
@@ -432,15 +435,6 @@ impl VulkanRenderer {
                 vk::IndexType::UINT32,
             );
 
-            self.device.device.cmd_bind_descriptor_sets(
-                command_buffer,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline.layout,
-                0,
-                &[self.texture_manager.textures[0].descriptor_set],
-                &[],
-            );
-
             let constants = PushConstants {
                 resolution: glam::Vec2::new(self.width as f32, self.height as f32),
                 time: self.time.elapsed().as_millis() as f32,
@@ -470,8 +464,22 @@ impl VulkanRenderer {
         let frame = &self.frames[self.current_frame];
         let command_buffer = frame.command_buffer;
         for model in self.model_manager.get_models() {
-            for mesh_handle in &model.mesh_handles {
+            for (i, mesh_handle) in (&model.mesh_handles).iter().enumerate() {
                 let mesh = self.mesh_manager.get_mesh(mesh_handle);
+
+                unsafe {
+                    self.device.device.cmd_bind_descriptor_sets(
+                        command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        self.pipeline.layout,
+                        0,
+                        &[
+                            self.texture_manager.textures[i % self.texture_manager.textures.len()]
+                                .descriptor_set,
+                        ],
+                        &[],
+                    )
+                };
 
                 unsafe {
                     self.device.device.cmd_draw_indexed(
